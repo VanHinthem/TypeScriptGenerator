@@ -317,7 +317,7 @@ If an option label appears more than once in the same option set, all duplicates
 
 ## Analyze TypeScript Usage
 
-Use the separate script `Analyze-TypeScriptMetadataUsage.ps1` to scan TypeScript source files and inventory:
+Use the separate script `TypeScriptMetadataMinimizer.ps1` to scan TypeScript source files and inventory:
 
 - which generated entities are imported
 - which attributes are used
@@ -337,12 +337,12 @@ The script prints a console summary per entity and can optionally prune unused a
   - `auto`: analyze both patterns
 - `-GeneratedMetadataPath` (default: `.\generated`)
 - `-PruneMetadata` (optional): remove unused attributes and option sets from generated files
-- `-SettingsPath` (default: `.\Analyze-TypeScriptMetadataUsage.settings.psd1`)
+- `-SettingsPath` (default: `.\TypeScriptMetadataMinimizer.settings.psd1`)
 - `-Verbose` (optional): show which attributes are removable per entity
 
 Parameter precedence:
 
-- script parameters override values from `Analyze-TypeScriptMetadataUsage.settings.psd1`
+- script parameters override values from `TypeScriptMetadataMinimizer.settings.psd1`
 - if `-SourceFolders` is omitted, `SourceFolders` from settings is used
 - if `-PruneMetadata` is omitted, `PruneMetadata` from settings controls prune mode
 
@@ -353,7 +353,7 @@ When `-PruneMetadata` is not set and removable attributes are found, the script 
 Scan multiple folders with mixed recursive behavior:
 
 ```powershell
-.\Analyze-TypeScriptMetadataUsage.ps1 `
+.\TypeScriptMetadataMinimizer.ps1 `
   -Template "auto" `
   -SourceFolders @(".\src|true", ".\tests|false", ".\webresources|true")
 ```
@@ -361,7 +361,7 @@ Scan multiple folders with mixed recursive behavior:
 Scan and prune generated metadata:
 
 ```powershell
-.\Analyze-TypeScriptMetadataUsage.ps1 `
+.\TypeScriptMetadataMinimizer.ps1 `
   -Template "default" `
   -SourceFolders @(".\src|true", ".\tests|false") `
   -GeneratedMetadataPath ".\generated" `
@@ -371,20 +371,20 @@ Scan and prune generated metadata:
 Run from settings file only:
 
 ```powershell
-.\Analyze-TypeScriptMetadataUsage.ps1
+.\TypeScriptMetadataMinimizer.ps1
 ```
 
 Use an explicit settings file:
 
 ```powershell
-.\Analyze-TypeScriptMetadataUsage.ps1 `
-  -SettingsPath ".\Analyze-TypeScriptMetadataUsage.settings.psd1"
+.\TypeScriptMetadataMinimizer.ps1 `
+  -SettingsPath ".\TypeScriptMetadataMinimizer.settings.psd1"
 ```
 
 Show removable attribute names:
 
 ```powershell
-.\Analyze-TypeScriptMetadataUsage.ps1 -Verbose
+.\TypeScriptMetadataMinimizer.ps1 -Verbose
 ```
 
 Note: detection is based on static usage patterns such as:
@@ -408,4 +408,5 @@ If you get `AADSTS50011`, provide a redirect URI that matches your app registrat
 For detailed metadata diagnostics, run with `-Verbose`.
 
 If you see an authority/tenant error right at login, verify parameter syntax: in PowerShell use `-EnvironmentUrl` (single dash), not `--EnvironmentUrl`.
+
 

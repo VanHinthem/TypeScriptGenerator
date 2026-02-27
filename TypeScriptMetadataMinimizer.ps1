@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [string[]]$SourceFolders,
 
@@ -8,7 +8,7 @@ param(
     [string]$GeneratedMetadataPath = ".\generated",
     [bool]$DefaultRecursive = $true,
     [switch]$PruneMetadata,
-    [string]$SettingsPath = ".\Analyze-TypeScriptMetadataUsage.settings.psd1"
+    [string]$SettingsPath = ".\TypeScriptMetadataMinimizer.settings.psd1"
 )
 
 Set-StrictMode -Version Latest
@@ -1315,3 +1315,4 @@ if (-not $pruneExecuted) {
         }
     }
 }
+

@@ -1,4 +1,4 @@
-# TypeScriptGenerator - Copilot Instructions
+﻿# TypeScriptGenerator - Copilot Instructions
 
 This repository generates TypeScript metadata files from Microsoft Dataverse entities using PowerShell templating.
 
@@ -10,12 +10,12 @@ This repository generates TypeScript metadata files from Microsoft Dataverse ent
 2. **Entity Selection** (`modules/EntitySelection.psm1`) - Combines entities from CLI args, `entity.txt`, or solution manifests; deduplicates case-insensitively (`Resolve-SelectedEntityLogicalNames`)
 3. **Metadata Retrieval** (`modules/DataverseApi.psm1`) - Fetches entity metadata via Dataverse Web API with pagination support
 4. **Template Rendering** (`modules/TemplateEngine.psm1`) - Custom template engine with `{{Token}}` placeholders and `{{#Collection}}...{{/Collection}}` loops (`Convert-EntityTypeScriptContent`)
-5. **File Generation** - Each template × each entity = one output file in `generated/`
+5. **File Generation** - Each template Ã— each entity = one output file in `generated/`
 
 ### Scripts
 
 - **TypeScriptGenerator.ps1** - Main generation script
-- **Analyze-TypeScriptMetadataUsage.ps1** - Scans TypeScript source to identify unused attributes/optionsets and optionally prunes them
+- **TypeScriptMetadataMinimizer.ps1** - Scans TypeScript source to identify unused attributes/optionsets and optionally prunes them
 
 ### Modules
 
@@ -26,7 +26,7 @@ All modules use `Set-StrictMode -Version Latest` and `$ErrorActionPreference = "
 - **EntitySelection.psm1** - Handles entity list files (supports `#` comments, comma/semicolon separators)
 - **DataverseQueries.psm1** - Centralized Dataverse URI/query construction helpers
 - **DataverseApi.psm1** - `Get-PagedItem` handles OData `@odata.nextLink` pagination
-- **TemplateEngine.psm1** - Recursive template rendering; `Convert-ToPascalIdentifier` handles label → TypeScript identifier conversion with diacritic removal
+- **TemplateEngine.psm1** - Recursive template rendering; `Convert-ToPascalIdentifier` handles label â†’ TypeScript identifier conversion with diacritic removal
 - **Auth.psm1** - Validates Dataverse URLs and handles MSAL token acquisition
 
 ### Template System
@@ -120,13 +120,13 @@ Duplicate option labels within the same optionset get suffixed with their numeri
 
 ```powershell
 # Scan TypeScript source for unused metadata
-.\Analyze-TypeScriptMetadataUsage.ps1 -SourceFolders @(".\src|true", ".\tests|false")
+.\TypeScriptMetadataMinimizer.ps1 -SourceFolders @(".\src|true", ".\tests|false")
 
 # Auto-prune unused attributes/optionsets
-.\Analyze-TypeScriptMetadataUsage.ps1 -SourceFolders @(".\src|true") -PruneMetadata
+.\TypeScriptMetadataMinimizer.ps1 -SourceFolders @(".\src|true") -PruneMetadata
 
 # Show removable attribute names
-.\Analyze-TypeScriptMetadataUsage.ps1 -Verbose
+.\TypeScriptMetadataMinimizer.ps1 -Verbose
 ```
 
 Analyzer notes:
@@ -158,3 +158,4 @@ No automated tests exist. Manual testing:
 **Duplicate output path error** - Multiple templates resolving to same output file for an entity. Check template file names for conflicts.
 
 **Empty entity list** - If no entities specified via any source, script processes **all non-private entities** in the environment (can be slow).
+
