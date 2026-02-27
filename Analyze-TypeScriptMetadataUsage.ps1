@@ -113,6 +113,17 @@ function Get-SettingsPropertyValue {
     )
 
     if ($null -eq $Settings) { return $null }
+
+    if ($Settings -is [System.Collections.IDictionary]) {
+        foreach ($key in $Settings.Keys) {
+            if ([string]$key -ieq $Name) {
+                return $Settings[$key]
+            }
+        }
+
+        return $null
+    }
+
     $property = $Settings.PSObject.Properties[$Name]
     if ($null -eq $property) { return $null }
     return $property.Value
@@ -833,6 +844,10 @@ function Invoke-PrunePass {
 
 $scriptRoot = Split-Path -Path $PSCommandPath -Parent
 $resolvedSettingsPath = Resolve-AbsolutePath -Path $SettingsPath -BasePath $scriptRoot
+if (-not $resolvedSettingsPath.EndsWith(".psd1", [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw ("SettingsPath must point to a .psd1 file. Current value: {0}" -f $resolvedSettingsPath)
+}
+
 $settingsPathExplicitlyProvided = $PSBoundParameters.ContainsKey("SettingsPath")
 $settings = $null
 

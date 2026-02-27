@@ -416,6 +416,16 @@ function Get-SettingsPropertyValue {
         return $null
     }
 
+    if ($Settings -is [System.Collections.IDictionary]) {
+        foreach ($key in $Settings.Keys) {
+            if ([string]$key -ieq $Name) {
+                return $Settings[$key]
+            }
+        }
+
+        return $null
+    }
+
     $property = $Settings.PSObject.Properties[$Name]
     if ($null -eq $property) {
         return $null
@@ -569,6 +579,10 @@ foreach ($moduleFile in $moduleFiles) {
 }
 
 $resolvedSettingsPath = Resolve-ScriptRelativePath -Path $SettingsPath -ScriptRoot $scriptRoot
+if (-not $resolvedSettingsPath.EndsWith(".psd1", [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw ("SettingsPath must point to a .psd1 file. Current value: {0}" -f $resolvedSettingsPath)
+}
+
 if (-not (Test-Path -LiteralPath $resolvedSettingsPath -PathType Leaf)) {
     throw ("Settings file not found: {0}" -f $resolvedSettingsPath)
 }
