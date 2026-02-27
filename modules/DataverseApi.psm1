@@ -138,32 +138,6 @@ function Get-PropertyValue {
 
 <#
 .SYNOPSIS
-Converts dynamic API payloads to plain objects for stable property access.
-#>
-function Convert-ToPlainObject {
-    param(
-        [object]$InputObject
-    )
-
-    if ($null -eq $InputObject) {
-        return $null
-    }
-
-    try {
-        $json = $InputObject | ConvertTo-Json -Depth 100 -Compress
-        if ([string]::IsNullOrWhiteSpace($json)) {
-            return $null
-        }
-
-        return $json | ConvertFrom-Json -Depth 100
-    }
-    catch {
-        return $null
-    }
-}
-
-<#
-.SYNOPSIS
 Resolves localized label text with LCID preference and fallbacks.
 #>
 function Get-LocalizedLabelText {
@@ -236,10 +210,6 @@ function Get-OptionChoicesFromOptionSetMetadata {
     $options = @()
     try {
         $optionsValue = Get-PropertyValue -InputObject $OptionSetMetadata -PropertyName "Options"
-        if ($null -eq $optionsValue) {
-            $plainOptionSetMetadata = Convert-ToPlainObject -InputObject $OptionSetMetadata
-            $optionsValue = Get-PropertyValue -InputObject $plainOptionSetMetadata -PropertyName "Options"
-        }
 
         if ($null -ne $optionsValue) {
             $options = @($optionsValue)
@@ -249,16 +219,6 @@ function Get-OptionChoicesFromOptionSetMetadata {
             $optionValue = $option
             $value = Get-PropertyValue -InputObject $optionValue -PropertyName "Value"
             $labelObject = Get-PropertyValue -InputObject $optionValue -PropertyName "Label"
-
-            if ($null -eq $value) {
-                $plainOption = Convert-ToPlainObject -InputObject $optionValue
-                if ($null -ne $plainOption) {
-                    $value = Get-PropertyValue -InputObject $plainOption -PropertyName "Value"
-                    if ($null -eq $labelObject) {
-                        $labelObject = Get-PropertyValue -InputObject $plainOption -PropertyName "Label"
-                    }
-                }
-            }
 
             if ($null -eq $value) {
                 continue
@@ -300,10 +260,6 @@ function Get-OptionChoicesFromBooleanMetadata {
     try {
         foreach ($propertyName in @("FalseOption", "TrueOption")) {
             $option = Get-PropertyValue -InputObject $AttributeMetadata -PropertyName $propertyName
-            if ($null -eq $option) {
-                $plainAttributeMetadata = Convert-ToPlainObject -InputObject $AttributeMetadata
-                $option = Get-PropertyValue -InputObject $plainAttributeMetadata -PropertyName $propertyName
-            }
 
             if ($null -eq $option) {
                 continue
@@ -311,15 +267,6 @@ function Get-OptionChoicesFromBooleanMetadata {
 
             $value = Get-PropertyValue -InputObject $option -PropertyName "Value"
             $labelObject = Get-PropertyValue -InputObject $option -PropertyName "Label"
-            if ($null -eq $value) {
-                $plainOption = Convert-ToPlainObject -InputObject $option
-                if ($null -ne $plainOption) {
-                    $value = Get-PropertyValue -InputObject $plainOption -PropertyName "Value"
-                    if ($null -eq $labelObject) {
-                        $labelObject = Get-PropertyValue -InputObject $plainOption -PropertyName "Label"
-                    }
-                }
-            }
 
             if ($null -eq $value) {
                 continue
@@ -564,17 +511,8 @@ function Get-EntityOptionSetDefinition {
             $optionSetMetadata = $null
 
             try {
-                $currentStep = "normalize-attribute"
-                $normalizedAttributeDetails = Convert-ToPlainObject -InputObject $attributeDetails
-                if ($null -eq $normalizedAttributeDetails) {
-                    $normalizedAttributeDetails = $attributeDetails
-                }
-
                 $currentStep = "read-logical-name"
-                $attributeLogicalName = [string](Get-PropertyValue -InputObject $normalizedAttributeDetails -PropertyName "LogicalName")
-                if ([string]::IsNullOrWhiteSpace($attributeLogicalName)) {
-                    $attributeLogicalName = [string](Get-PropertyValue -InputObject $attributeDetails -PropertyName "LogicalName")
-                }
+                $attributeLogicalName = [string](Get-PropertyValue -InputObject $attributeDetails -PropertyName "LogicalName")
 
                 if ([string]::IsNullOrWhiteSpace($attributeLogicalName)) {
                     continue
@@ -586,18 +524,12 @@ function Get-EntityOptionSetDefinition {
                 }
 
                 $currentStep = "read-optionset"
-                $optionSetMetadata = Get-PropertyValue -InputObject $normalizedAttributeDetails -PropertyName "OptionSet"
-                if ($null -eq $optionSetMetadata) {
-                    $optionSetMetadata = Get-PropertyValue -InputObject $attributeDetails -PropertyName "OptionSet"
-                }
+                $optionSetMetadata = Get-PropertyValue -InputObject $attributeDetails -PropertyName "OptionSet"
 
                 $currentStep = "extract-options"
                 $options = @(Get-OptionChoicesFromOptionSetMetadata -OptionSetMetadata $optionSetMetadata -LabelLcid $LabelLcid)
                 if ($options.Count -eq 0 -and $isBooleanType) {
-                    $options = @(Get-OptionChoicesFromBooleanMetadata -AttributeMetadata $normalizedAttributeDetails -LabelLcid $LabelLcid)
-                    if ($options.Count -eq 0) {
-                        $options = @(Get-OptionChoicesFromBooleanMetadata -AttributeMetadata $attributeDetails -LabelLcid $LabelLcid)
-                    }
+                    $options = @(Get-OptionChoicesFromBooleanMetadata -AttributeMetadata $attributeDetails -LabelLcid $LabelLcid)
                 }
 
                 if ($options.Count -eq 0) {
