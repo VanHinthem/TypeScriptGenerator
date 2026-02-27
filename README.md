@@ -2,7 +2,7 @@
 
 Generate TypeScript metadata from Dataverse.
 
-For each selected entity, the script renders every template file found in `templates/<Template>/` and writes output into `generated/` using the same relative path structure.
+For each selected entity, the script renders every template file found in `templates/<Template>/` and writes output into the folder set by `TypeScriptOutputPath` (default: `.\generated`) using the same relative path structure.
 
 No `index.ts` is generated.
 
@@ -50,13 +50,20 @@ Command-line parameters override values from `settings.psd1`.
   EntityListPath       = ".\entity.txt"
   EntityLogicalNames   = @()
   SolutionUniqueName   = ""
+  SourceFolders        = @(
+    ".\src|true"
+  )
+  DefaultRecursive     = $true
+  PruneMetadata        = $false
 }
 ```
 
-Optional script parameter:
+Common generator parameters:
 
 - `-SettingsPath` (default: `.\settings.psd1`)
 - `-MaxParallelEntities` (default: `4`)
+- `-Template` (default from settings)
+- `-TypeScriptOutputPath` (default from settings)
 
 `EnvironmentUrl` can come from `settings.psd1` or from `-EnvironmentUrl`. One of both is required.
 
@@ -325,6 +332,7 @@ Use the separate script `TypeScriptMetadataMinimizer.ps1` to scan TypeScript sou
 - which attributes and option sets are unused in generated metadata
 
 The script prints a console summary per entity and can optionally prune unused attributes and option sets from generated metadata files.
+It uses the same `settings.psd1` file as the generator script.
 
 ### Parameters
 
@@ -336,6 +344,7 @@ The script prints a console summary per entity and can optionally prune unused a
   - `onefile`: analyze `optionsets` inside entity metadata classes
   - `auto`: analyze both patterns
 - `-GeneratedMetadataPath` (uses `TypeScriptOutputPath` from settings when omitted)
+- `-DefaultRecursive` (default: `$true`; used when a `SourceFolders` entry omits `|true/false`)
 - `-PruneMetadata` (optional): remove unused attributes and option sets from generated files
 - `-SettingsPath` (default: `.\settings.psd1`)
 - `-Verbose` (optional): show which attributes are removable per entity
@@ -346,6 +355,7 @@ Parameter precedence:
 - if `-SourceFolders` is omitted, `SourceFolders` from settings is used (required)
 - if `-Template` is omitted, `Template` from settings is used (required)
 - if `-GeneratedMetadataPath` is omitted, `TypeScriptOutputPath` from settings is used (required)
+- if `-DefaultRecursive` is omitted, `DefaultRecursive` from settings is used when present
 - if `-PruneMetadata` is omitted, `PruneMetadata` from settings controls prune mode when present
 
 When `-PruneMetadata` is not set and removable attributes are found, the script asks at the end if prune should run now.
