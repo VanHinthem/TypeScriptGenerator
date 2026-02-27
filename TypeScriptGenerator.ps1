@@ -803,6 +803,7 @@ foreach ($templateFilePath in @($templateSetFiles.TemplateFiles)) {
 Write-Verbose ("Template set '{0}' loaded with {1} template file(s)." -f $Template, $templateDefinitions.Count)
 
 $normalizedEnvironmentUrl = $EnvironmentUrl.TrimEnd("/")
+Write-Output ("EnvironmentUrl: {0}" -f $normalizedEnvironmentUrl)
 
 # Prepare output folder, optionally clearing existing generated files.
 if (-not (Test-Path -LiteralPath $TypeScriptOutputPath)) {
