@@ -241,6 +241,12 @@ Inside a loop, the singular alias of the collection is available automatically:
 - `OptionSets` -> `OptionSet`
 - `Options` -> `Option`
 
+Template validation behavior:
+
+- Unknown placeholder tokens cause generation to fail.
+- Unknown loop collections cause generation to fail.
+- Tokens that resolve to non-scalar values cause generation to fail.
+
 ### Entity Template Tokens
 
 Top-level:
@@ -391,5 +397,4 @@ If you get `AADSTS50011`, provide a redirect URI that matches your app registrat
 For detailed metadata diagnostics, run with `-Verbose`.
 
 If you see an authority/tenant error right at login, verify parameter syntax: in PowerShell use `-EnvironmentUrl` (single dash), not `--EnvironmentUrl`.
-
 

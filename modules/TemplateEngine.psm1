@@ -222,12 +222,20 @@ function Convert-TemplateContent {
 
             $collectionResult = Get-TemplateValueByPath -Context $templateContext -Path $collectionName
             if (-not $collectionResult.Found) {
-                return ""
+                throw ("Unknown template loop collection '{0}'." -f $collectionName)
             }
 
             $collection = $collectionResult.Value
             if ($null -eq $collection) {
-                return ""
+                throw ("Template loop collection '{0}' resolved to null." -f $collectionName)
+            }
+
+            if ($collection -is [string]) {
+                throw ("Template loop collection '{0}' resolved to a string. Expected a collection." -f $collectionName)
+            }
+
+            if (-not ($collection -is [System.Collections.IEnumerable])) {
+                throw ("Template loop collection '{0}' resolved to non-collection type '{1}'." -f $collectionName, $collection.GetType().FullName)
             }
 
             $builder = New-Object System.Text.StringBuilder
@@ -260,7 +268,13 @@ function Convert-TemplateContent {
             $tokenName = [string]$match.Groups[1].Value
             $tokenResult = Get-TemplateValueByPath -Context $templateContext -Path $tokenName
             if (-not $tokenResult.Found) {
-                return ""
+                throw ("Unknown template token '{0}'." -f $tokenName)
+            }
+
+            if ($null -ne $tokenResult.Value -and
+                $tokenResult.Value -is [System.Collections.IEnumerable] -and
+                -not ($tokenResult.Value -is [string])) {
+                throw ("Template token '{0}' resolved to a non-scalar value. Use a concrete leaf field." -f $tokenName)
             }
 
             return Convert-TemplateValueToString -Value $tokenResult.Value
