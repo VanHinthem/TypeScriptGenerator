@@ -4,8 +4,6 @@ Generate TypeScript metadata from Dataverse.
 
 For each selected entity, the script renders every template file found in `templates/<Template>/` and writes output into the folder set by `TypeScriptOutputPath` (default: `.\generated`) using the same relative path structure.
 
-No `index.ts` is generated.
-
 ## Project Files
 
 - `TypeScriptGenerator.ps1`: main script
