@@ -13,6 +13,7 @@ param(
     [switch]$NoClean,
     [switch]$NoOverwrite,
     [Nullable[int]]$OptionSetLabelLcid,
+    [int]$MaxParallelEntities = 4,
     [string[]]$EntityLogicalNames,
     [string]$EntityListPath,
     [string]$SolutionUniqueName,
@@ -634,6 +635,17 @@ if (-not $PSBoundParameters.ContainsKey("OptionSetLabelLcid")) {
         $OptionSetLabelLcid = $parsedLcid
     }
 }
+if (-not $PSBoundParameters.ContainsKey("MaxParallelEntities")) {
+    $maxParallelEntitiesFromSettings = Get-SettingsPropertyValue -Settings $settings -Name "MaxParallelEntities"
+    if ($null -ne $maxParallelEntitiesFromSettings -and -not [string]::IsNullOrWhiteSpace([string]$maxParallelEntitiesFromSettings)) {
+        $parsedMaxParallelEntities = 0
+        if (-not [int]::TryParse([string]$maxParallelEntitiesFromSettings, [ref]$parsedMaxParallelEntities)) {
+            throw ("Invalid MaxParallelEntities in settings file '{0}': {1}" -f $resolvedSettingsPath, [string]$maxParallelEntitiesFromSettings)
+        }
+
+        $MaxParallelEntities = $parsedMaxParallelEntities
+    }
+}
 
 if ($NoClean.IsPresent -and $PSBoundParameters.ContainsKey("Clean")) {
     throw "Use either -Clean or -NoClean, not both."
@@ -686,6 +698,15 @@ if (-not [int]::TryParse([string]$OptionSetLabelLcid, [ref]$resolvedOptionSetLab
 
 if ($resolvedOptionSetLabelLcid -lt 1) {
     throw ("OptionSetLabelLcid must be >= 1. Current value: {0}" -f $resolvedOptionSetLabelLcid)
+}
+
+$resolvedMaxParallelEntities = 0
+if (-not [int]::TryParse([string]$MaxParallelEntities, [ref]$resolvedMaxParallelEntities)) {
+    throw ("MaxParallelEntities must be a valid integer. Current value: {0}" -f [string]$MaxParallelEntities)
+}
+
+if ($resolvedMaxParallelEntities -lt 1) {
+    throw ("MaxParallelEntities must be >= 1. Current value: {0}" -f $resolvedMaxParallelEntities)
 }
 
 # Convert relative output/input paths relative to this script location.
@@ -826,45 +847,182 @@ Write-Verbose ("Entity count: {0}" -f $entitiesToProcess.Count)
 
 $entityGenerationItems = New-Object System.Collections.Generic.List[object]
 
-foreach ($entity in $entitiesToProcess) {
-    $entityLogicalName = $entity.LogicalName
-    $entitySchemaName = $entity.SchemaName
+if ($entitiesToProcess.Count -gt 0) {
+    $parallelWorkerCount = [Math]::Min($resolvedMaxParallelEntities, $entitiesToProcess.Count)
+    if ($parallelWorkerCount -le 1) {
+        foreach ($entity in $entitiesToProcess) {
+            $entityLogicalName = [string]$entity.LogicalName
+            $entitySchemaName = [string]$entity.SchemaName
 
-    Write-Verbose ("Processing entity: {0}" -f $entityLogicalName)
+            Write-Verbose ("Processing entity: {0}" -f $entityLogicalName)
 
-    Write-Verbose ("Retrieving attributes for entity '{0}'..." -f $entityLogicalName)
-    $attributes = DataverseApi\Get-EntityAttribute `
-        -EnvironmentUrl $normalizedEnvironmentUrl `
-        -Headers $headers `
-        -EntityLogicalName $entityLogicalName
+            Write-Verbose ("Retrieving attributes for entity '{0}'..." -f $entityLogicalName)
+            $attributes = DataverseApi\Get-EntityAttribute `
+                -EnvironmentUrl $normalizedEnvironmentUrl `
+                -Headers $headers `
+                -EntityLogicalName $entityLogicalName
 
-    try {
-        Write-Verbose ("Retrieving option sets for entity '{0}' with LCID {1}..." -f $entityLogicalName, $resolvedOptionSetLabelLcid)
-        $optionSetDefinitions = DataverseApi\Get-EntityOptionSetDefinition `
-            -EnvironmentUrl $normalizedEnvironmentUrl `
-            -Headers $headers `
-            -EntityLogicalName $entityLogicalName `
-            -LabelLcid $resolvedOptionSetLabelLcid
+            try {
+                Write-Verbose ("Retrieving option sets for entity '{0}' with LCID {1}..." -f $entityLogicalName, $resolvedOptionSetLabelLcid)
+                $optionSetDefinitions = DataverseApi\Get-EntityOptionSetDefinition `
+                    -EnvironmentUrl $normalizedEnvironmentUrl `
+                    -Headers $headers `
+                    -EntityLogicalName $entityLogicalName `
+                    -LabelLcid $resolvedOptionSetLabelLcid
+            }
+            catch {
+                throw ("Could not retrieve option sets for entity '{0}'. Error: {1}" -f $entityLogicalName, $_.Exception.Message)
+            }
+
+            if ($null -eq $optionSetDefinitions) {
+                $optionSetDefinitions = @()
+            }
+
+            Write-Verbose ("Entity '{0}' metadata retrieved. Attributes={1}, OptionSets={2}" -f $entityLogicalName, @($attributes).Count, @($optionSetDefinitions).Count)
+
+            [void]$entityGenerationItems.Add([pscustomobject]@{
+                EntityLogicalName    = $entityLogicalName
+                EntitySchemaName     = $entitySchemaName
+                EntityMetadata       = $entity
+                Attributes           = @($attributes)
+                OptionSetDefinitions = @($optionSetDefinitions)
+            })
+        }
     }
-    catch {
-        throw ("Could not retrieve option sets for entity '{0}'. Error: {1}" -f $entityLogicalName, $_.Exception.Message)
+    else {
+        Write-Verbose ("Processing entity metadata in parallel. Workers={0}" -f $parallelWorkerCount)
+
+        $dataverseQueriesModulePath = Join-Path -Path $scriptRoot -ChildPath "modules\DataverseQueries.psm1"
+        $dataverseApiModulePath = Join-Path -Path $scriptRoot -ChildPath "modules\DataverseApi.psm1"
+
+        $entityMetadataWorkerScript = {
+            param(
+                [Parameter(Mandatory = $true)]
+                [string]$EntityLogicalName,
+                [Parameter(Mandatory = $true)]
+                [AllowEmptyString()]
+                [string]$EntitySchemaName,
+                [Parameter(Mandatory = $true)]
+                [string]$EnvironmentUrl,
+                [Parameter(Mandatory = $true)]
+                [hashtable]$Headers,
+                [Parameter(Mandatory = $true)]
+                [int]$LabelLcid,
+                [Parameter(Mandatory = $true)]
+                [string]$DataverseQueriesModulePath,
+                [Parameter(Mandatory = $true)]
+                [string]$DataverseApiModulePath
+            )
+
+            Set-StrictMode -Version Latest
+            $ErrorActionPreference = "Stop"
+
+            Remove-Module -Name DataverseApi -Force -ErrorAction SilentlyContinue
+            Remove-Module -Name DataverseQueries -Force -ErrorAction SilentlyContinue
+            Import-Module -Name $DataverseQueriesModulePath -Force -DisableNameChecking -ErrorAction Stop | Out-Null
+            Import-Module -Name $DataverseApiModulePath -Force -DisableNameChecking -ErrorAction Stop | Out-Null
+
+            $attributes = DataverseApi\Get-EntityAttribute `
+                -EnvironmentUrl $EnvironmentUrl `
+                -Headers $Headers `
+                -EntityLogicalName $EntityLogicalName
+
+            try {
+                $optionSetDefinitions = DataverseApi\Get-EntityOptionSetDefinition `
+                    -EnvironmentUrl $EnvironmentUrl `
+                    -Headers $Headers `
+                    -EntityLogicalName $EntityLogicalName `
+                    -LabelLcid $LabelLcid
+            }
+            catch {
+                throw ("Could not retrieve option sets for entity '{0}'. Error: {1}" -f $EntityLogicalName, $_.Exception.Message)
+            }
+
+            if ($null -eq $optionSetDefinitions) {
+                $optionSetDefinitions = @()
+            }
+
+            return [pscustomobject]@{
+                EntityLogicalName    = $EntityLogicalName
+                EntitySchemaName     = $EntitySchemaName
+                Attributes           = @($attributes)
+                OptionSetDefinitions = @($optionSetDefinitions)
+            }
+        }
+
+        $runspacePool = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool(1, $parallelWorkerCount)
+        $runspacePool.Open()
+
+        $entityWorkItems = New-Object System.Collections.Generic.List[object]
+        try {
+            foreach ($entity in $entitiesToProcess) {
+                $entityLogicalName = [string]$entity.LogicalName
+                $entitySchemaName = [string]$entity.SchemaName
+                if ([string]::IsNullOrWhiteSpace($entityLogicalName)) {
+                    throw "Entity logical name is missing."
+                }
+
+                $worker = [PowerShell]::Create()
+                $worker.RunspacePool = $runspacePool
+                [void]$worker.AddScript($entityMetadataWorkerScript.ToString())
+                [void]$worker.AddArgument($entityLogicalName)
+                [void]$worker.AddArgument($entitySchemaName)
+                [void]$worker.AddArgument($normalizedEnvironmentUrl)
+                [void]$worker.AddArgument($headers)
+                [void]$worker.AddArgument($resolvedOptionSetLabelLcid)
+                [void]$worker.AddArgument($dataverseQueriesModulePath)
+                [void]$worker.AddArgument($dataverseApiModulePath)
+
+                $asyncResult = $worker.BeginInvoke()
+                [void]$entityWorkItems.Add([pscustomobject]@{
+                    EntityLogicalName = $entityLogicalName
+                    EntitySchemaName  = $entitySchemaName
+                    EntityMetadata    = $entity
+                    Worker            = $worker
+                    AsyncResult       = $asyncResult
+                })
+            }
+
+            foreach ($workItem in @($entityWorkItems.ToArray())) {
+                try {
+                    $workerResults = @($workItem.Worker.EndInvoke($workItem.AsyncResult))
+                    if ($workerResults.Count -eq 0) {
+                        throw ("No metadata result was returned for entity '{0}'." -f $workItem.EntityLogicalName)
+                    }
+
+                    $workerResult = $workerResults[0]
+                    Write-Verbose ("Entity '{0}' metadata retrieved. Attributes={1}, OptionSets={2}" -f $workItem.EntityLogicalName, @($workerResult.Attributes).Count, @($workerResult.OptionSetDefinitions).Count)
+
+                    [void]$entityGenerationItems.Add([pscustomobject]@{
+                        EntityLogicalName    = [string]$workerResult.EntityLogicalName
+                        EntitySchemaName     = [string]$workerResult.EntitySchemaName
+                        EntityMetadata       = $workItem.EntityMetadata
+                        Attributes           = @($workerResult.Attributes)
+                        OptionSetDefinitions = @($workerResult.OptionSetDefinitions)
+                    })
+                }
+                catch {
+                    throw ("Could not retrieve metadata for entity '{0}'. Error: {1}" -f $workItem.EntityLogicalName, $_.Exception.Message)
+                }
+                finally {
+                    if ($null -ne $workItem.Worker) {
+                        $workItem.Worker.Dispose()
+                        $workItem.Worker = $null
+                    }
+                }
+            }
+        }
+        finally {
+            foreach ($workItem in @($entityWorkItems.ToArray())) {
+                if ($null -ne $workItem.Worker) {
+                    $workItem.Worker.Dispose()
+                }
+            }
+
+            $runspacePool.Close()
+            $runspacePool.Dispose()
+        }
     }
-
-    if ($null -eq $optionSetDefinitions) {
-        $optionSetDefinitions = @()
-    }
-
-    Write-Verbose ("Entity '{0}' metadata retrieved. Attributes={1}, OptionSets={2}" -f $entityLogicalName, @($attributes).Count, @($optionSetDefinitions).Count)
-
-    $normalizedOptionSetDefinitions = @($optionSetDefinitions)
-
-    [void]$entityGenerationItems.Add([pscustomobject]@{
-        EntityLogicalName    = $entityLogicalName
-        EntitySchemaName     = $entitySchemaName
-        EntityMetadata       = $entity
-        Attributes           = @($attributes)
-        OptionSetDefinitions = $normalizedOptionSetDefinitions
-    })
 }
 
 if ($templateDefinitions.Count -eq 0) {

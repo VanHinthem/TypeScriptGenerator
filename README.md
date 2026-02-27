@@ -46,6 +46,7 @@ Command-line parameters override values from `settings.json`.
   "Clean": true,
   "Overwrite": true,
   "OptionSetLabelLcid": 1033,
+  "MaxParallelEntities": 4,
   "EntityListPath": ".\\entity.txt",
   "EntityLogicalNames": [],
   "SolutionUniqueName": ""
@@ -55,6 +56,7 @@ Command-line parameters override values from `settings.json`.
 Optional script parameter:
 
 - `-SettingsPath` (default: `.\settings.json`)
+- `-MaxParallelEntities` (default: `4`)
 
 `EnvironmentUrl` can come from `settings.json` or from `-EnvironmentUrl`. One of both is required.
 
@@ -206,6 +208,13 @@ Set label language (LCID):
 ```powershell
 .\TypeScriptGenerator.ps1 `
   -OptionSetLabelLcid 1043
+```
+
+Control parallel metadata retrieval workers:
+
+```powershell
+.\TypeScriptGenerator.ps1 `
+  -MaxParallelEntities 6
 ```
 
 ## Entity Selection Rules

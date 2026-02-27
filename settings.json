@@ -8,6 +8,7 @@
   "Clean": true,
   "Overwrite": true,
   "OptionSetLabelLcid": 1033,
+  "MaxParallelEntities": 4,
   "EntityListPath": ".\\entity.txt",
   "EntityLogicalNames": [],
   "SolutionUniqueName": ""
