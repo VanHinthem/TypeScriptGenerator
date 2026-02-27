@@ -4,6 +4,10 @@ $ErrorActionPreference = "Stop"
 <#
 .SYNOPSIS
 Normalizes Dataverse environment URL by removing trailing slash.
+.PARAMETER EnvironmentUrl
+Dataverse organization URL.
+.OUTPUTS
+System.String
 #>
 function Get-NormalizedEnvironmentUrl {
     param(
@@ -18,6 +22,12 @@ function Get-NormalizedEnvironmentUrl {
 <#
 .SYNOPSIS
 Performs a GET call against Dataverse Web API.
+.PARAMETER Uri
+Fully-qualified Dataverse Web API URI.
+.PARAMETER Headers
+HTTP headers including Authorization.
+.OUTPUTS
+System.Object
 #>
 function Invoke-DataverseGet {
     param(
@@ -35,6 +45,12 @@ function Invoke-DataverseGet {
 <#
 .SYNOPSIS
 Retrieves all items from an OData endpoint with @odata.nextLink pagination.
+.PARAMETER Uri
+Initial page URI.
+.PARAMETER Headers
+HTTP headers including Authorization.
+.OUTPUTS
+System.Object[]
 #>
 function Get-PagedItem {
     param(
@@ -89,6 +105,14 @@ function Get-PagedItem {
 <#
 .SYNOPSIS
 Reads a property value from PSObject or dictionary input.
+.DESCRIPTION
+Attempts PSObject property lookup first, then dictionary key lookup.
+.PARAMETER InputObject
+Object or dictionary containing the value.
+.PARAMETER PropertyName
+Property/key name to read.
+.OUTPUTS
+System.Object
 #>
 function Get-PropertyValue {
     param(
@@ -139,6 +163,15 @@ function Get-PropertyValue {
 <#
 .SYNOPSIS
 Resolves localized label text with LCID preference and fallbacks.
+.DESCRIPTION
+Prefers `UserLocalizedLabel`, then a matching `LocalizedLabels.LanguageCode`,
+and finally the first localized label.
+.PARAMETER LabelObject
+Dataverse label object.
+.PARAMETER LabelLcid
+Preferred locale identifier.
+.OUTPUTS
+System.String
 #>
 function Get-LocalizedLabelText {
     param(
@@ -195,6 +228,12 @@ function Get-LocalizedLabelText {
 <#
 .SYNOPSIS
 Extracts option values/labels from OptionSet metadata.
+.PARAMETER OptionSetMetadata
+Dataverse option set metadata object.
+.PARAMETER LabelLcid
+Preferred locale identifier.
+.OUTPUTS
+System.Object[]
 #>
 function Get-OptionChoicesFromOptionSetMetadata {
     param(
@@ -245,6 +284,12 @@ function Get-OptionChoicesFromOptionSetMetadata {
 <#
 .SYNOPSIS
 Extracts option values/labels from Boolean attribute metadata.
+.PARAMETER AttributeMetadata
+Dataverse boolean attribute metadata object.
+.PARAMETER LabelLcid
+Preferred locale identifier.
+.OUTPUTS
+System.Object[]
 #>
 function Get-OptionChoicesFromBooleanMetadata {
     param(
@@ -293,6 +338,14 @@ function Get-OptionChoicesFromBooleanMetadata {
 <#
 .SYNOPSIS
 Gets entity logical names included in a Dataverse solution.
+.PARAMETER EnvironmentUrl
+Dataverse organization URL.
+.PARAMETER Headers
+HTTP headers including Authorization.
+.PARAMETER SolutionUniqueName
+Unique name of the solution.
+.OUTPUTS
+System.String[]
 #>
 function Get-EntityLogicalNamesFromSolution {
     param(
@@ -330,6 +383,7 @@ function Get-EntityLogicalNamesFromSolution {
         $components = @(Get-PagedItem -Uri $componentsUri -Headers $Headers)
     }
     catch {
+        # Some environments reject guid literals in this endpoint filter.
         $componentsUriFallback = DataverseQueries\Get-DataverseSolutionComponentsEntityUri `
             -EnvironmentUrl $normalizedEnvironmentUrl `
             -SolutionId $solutionId
@@ -372,6 +426,7 @@ function Get-EntityLogicalNamesFromSolution {
         }
         catch {
             try {
+                # Fallback to filter-style entity lookup when key-segment lookup fails.
                 $entityUriFallback = DataverseQueries\Get-DataverseEntityDefinitionByMetadataIdFilterUri `
                     -EnvironmentUrl $normalizedEnvironmentUrl `
                     -MetadataId $metadataId
@@ -395,6 +450,14 @@ function Get-EntityLogicalNamesFromSolution {
 <#
 .SYNOPSIS
 Gets normalized attribute metadata (logical/schema name) for an entity.
+.PARAMETER EnvironmentUrl
+Dataverse organization URL.
+.PARAMETER Headers
+HTTP headers including Authorization.
+.PARAMETER EntityLogicalName
+Entity logical name.
+.OUTPUTS
+System.Object[]
 #>
 function Get-EntityAttribute {
     param(
@@ -439,6 +502,16 @@ function Get-EntityAttribute {
 <#
 .SYNOPSIS
 Gets option set definitions for supported attribute metadata types.
+.PARAMETER EnvironmentUrl
+Dataverse organization URL.
+.PARAMETER Headers
+HTTP headers including Authorization.
+.PARAMETER EntityLogicalName
+Entity logical name.
+.PARAMETER LabelLcid
+Preferred locale identifier for option labels.
+.OUTPUTS
+System.Object[]
 #>
 function Get-EntityOptionSetDefinition {
     param(

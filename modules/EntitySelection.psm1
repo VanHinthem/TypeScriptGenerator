@@ -4,6 +4,10 @@ $ErrorActionPreference = "Stop"
 <#
 .SYNOPSIS
 Normalizes a candidate entity logical name.
+.PARAMETER Name
+Candidate name value.
+.OUTPUTS
+System.String
 #>
 function Get-NormalizedEntityLogicalName {
     param(
@@ -27,6 +31,10 @@ function Get-NormalizedEntityLogicalName {
 Reads entity logical names from a file.
 .DESCRIPTION
 Supports comments (lines starting with #) and comma/semicolon separated entries.
+.PARAMETER Path
+Entity list file path.
+.OUTPUTS
+System.String[]
 #>
 function Get-EntityLogicalNamesFromFile {
     param(
@@ -52,6 +60,7 @@ function Get-EntityLogicalNamesFromFile {
             continue
         }
 
+        # Support inline comments after entity names.
         $noComment = ($normalizedLine.Split("#", 2)[0]).Trim()
         if ([string]::IsNullOrWhiteSpace($noComment)) {
             continue
@@ -76,6 +85,14 @@ function Get-EntityLogicalNamesFromFile {
 <#
 .SYNOPSIS
 Adds logical names to the target list once, case-insensitively.
+.PARAMETER SourceNames
+Names to process.
+.PARAMETER TargetNames
+Ordered target list.
+.PARAMETER SeenNames
+Case-insensitive set used for deduplication.
+.OUTPUTS
+System.Int32
 #>
 function Add-UniqueEntityLogicalName {
     param(
@@ -117,6 +134,18 @@ Resolves the final set of entity logical names to process.
 .DESCRIPTION
 Combines entity names from parameters, entity list file, and optional solution membership.
 Deduplicates values case-insensitively while preserving first-seen order.
+.PARAMETER EntityLogicalNames
+Explicit entity names.
+.PARAMETER EntityListPath
+Optional entity list file path.
+.PARAMETER SolutionUniqueName
+Optional solution unique name.
+.PARAMETER EnvironmentUrl
+Dataverse organization URL.
+.PARAMETER Headers
+HTTP headers including Authorization.
+.OUTPUTS
+System.String[]
 #>
 function Resolve-SelectedEntityLogicalNames {
     param(

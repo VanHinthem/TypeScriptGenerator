@@ -4,6 +4,10 @@ $ErrorActionPreference = "Stop"
 <#
 .SYNOPSIS
 Checks whether a value is an absolute URI.
+.PARAMETER Value
+URI text to validate.
+.OUTPUTS
+System.Boolean
 #>
 function Test-IsAbsoluteUri {
     param(
@@ -23,6 +27,10 @@ function Test-IsAbsoluteUri {
 <#
 .SYNOPSIS
 Checks whether a value is an absolute HTTP(S) URI.
+.PARAMETER Value
+URI text to validate.
+.OUTPUTS
+System.Boolean
 #>
 function Test-IsAbsoluteHttpUri {
     param(
@@ -50,6 +58,15 @@ function Test-IsAbsoluteHttpUri {
 <#
 .SYNOPSIS
 Validates authentication inputs before MSAL login.
+.DESCRIPTION
+Provides focused error messages for common parameter mistakes, including
+swapped TenantId/EnvironmentUrl and double-dash parameter typos.
+.PARAMETER TenantId
+Tenant identifier (organizations, GUID, or domain).
+.PARAMETER EnvironmentUrl
+Dataverse organization URL.
+.PARAMETER RedirectUri
+Redirect URI configured on the app registration.
 #>
 function Assert-ValidDataverseAuthInput {
     param(
@@ -90,6 +107,9 @@ function Assert-ValidDataverseAuthInput {
 <#
 .SYNOPSIS
 Imports MSAL.PS, installing it if required.
+.DESCRIPTION
+Attempts module import first, then bootstraps NuGet and installs MSAL.PS for the
+current user when missing.
 #>
 function Import-MsalModule {
     if (Get-Module -ListAvailable -Name "MSAL.PS") {
@@ -128,6 +148,16 @@ function Import-MsalModule {
 <#
 .SYNOPSIS
 Performs interactive login and returns an access token.
+.PARAMETER TenantId
+Tenant identifier.
+.PARAMETER ClientId
+App registration client id.
+.PARAMETER EnvironmentUrl
+Dataverse organization URL.
+.PARAMETER RedirectUri
+Redirect URI configured on the app registration.
+.OUTPUTS
+System.String
 #>
 function Get-AccessTokenInteractive {
     param(
@@ -178,6 +208,16 @@ function Get-AccessTokenInteractive {
 <#
 .SYNOPSIS
 Gets a Dataverse access token for the configured tenant/app.
+.PARAMETER TenantId
+Tenant identifier.
+.PARAMETER ClientId
+App registration client id.
+.PARAMETER EnvironmentUrl
+Dataverse organization URL.
+.PARAMETER RedirectUri
+Redirect URI configured on the app registration.
+.OUTPUTS
+System.String
 #>
 function Get-DataverseAccessToken {
     param(
@@ -214,4 +254,3 @@ function Get-DataverseAccessToken {
 }
 
 Export-ModuleMember -Function Get-DataverseAccessToken
-

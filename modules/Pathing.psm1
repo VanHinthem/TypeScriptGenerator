@@ -6,6 +6,12 @@ $ErrorActionPreference = "Stop"
 Resolves a path relative to the script root.
 .DESCRIPTION
 Supports absolute, relative, environment-variable, and home-prefixed (~) paths.
+.PARAMETER Path
+Input path to resolve.
+.PARAMETER ScriptRoot
+Base directory used for relative paths.
+.OUTPUTS
+System.String
 #>
 function Resolve-ScriptRelativePath {
     param(

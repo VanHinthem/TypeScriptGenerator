@@ -4,6 +4,12 @@ $ErrorActionPreference = "Stop"
 <#
 .SYNOPSIS
 Reads a dictionary value using case-insensitive key comparison.
+.PARAMETER Dictionary
+Dictionary to search.
+.PARAMETER Key
+Target key.
+.OUTPUTS
+PSCustomObject with `Found` and `Value`.
 #>
 function Get-DictionaryValueCaseInsensitive {
     param(
@@ -39,6 +45,12 @@ function Get-DictionaryValueCaseInsensitive {
 <#
 .SYNOPSIS
 Reads an object property value using case-insensitive property comparison.
+.PARAMETER InputObject
+Object to inspect.
+.PARAMETER PropertyName
+Property name to search.
+.OUTPUTS
+PSCustomObject with `Found` and `Value`.
 #>
 function Get-ObjectPropertyValueCaseInsensitive {
     param(

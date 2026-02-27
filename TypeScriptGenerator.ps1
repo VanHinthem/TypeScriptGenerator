@@ -402,6 +402,18 @@ function Resolve-EntityPathTokenValue {
     throw ("Unknown output path token '{0}'. Supported: {{Entity.<field>}} (for example {{Entity.LogicalName}}, {{Entity.SchemaName}}, {{Entity.DisplayName}})." -f $TokenName)
 }
 
+<#
+.SYNOPSIS
+Reads a setting value by name from hashtable or object input.
+.DESCRIPTION
+Uses case-insensitive lookup for dictionary keys.
+.PARAMETER Settings
+Settings container from `Import-PowerShellDataFile`.
+.PARAMETER Name
+Setting name to retrieve.
+.OUTPUTS
+System.Object
+#>
 function Get-SettingsPropertyValue {
     param(
         [AllowNull()]
@@ -434,6 +446,16 @@ function Get-SettingsPropertyValue {
     return $property.Value
 }
 
+<#
+.SYNOPSIS
+Converts string or collection input into a normalized string array.
+.DESCRIPTION
+String values can be comma/semicolon/newline separated.
+.PARAMETER Value
+Input value to normalize.
+.OUTPUTS
+System.String[]
+#>
 function Convert-ToStringArray {
     param(
         [AllowNull()]
@@ -447,6 +469,7 @@ function Convert-ToStringArray {
     $items = New-Object System.Collections.Generic.List[string]
 
     if ($Value -is [string]) {
+        # Accept list-style values in a single string setting.
         $parts = [string]$Value -split "[,;`r`n]+"
         foreach ($part in $parts) {
             $trimmedPart = [string]$part
@@ -477,6 +500,18 @@ function Convert-ToStringArray {
     return $items.ToArray()
 }
 
+<#
+.SYNOPSIS
+Converts a settings value to boolean with strict validation.
+.PARAMETER Value
+Raw setting value.
+.PARAMETER SettingName
+Name used in error messages.
+.PARAMETER SettingsPath
+Settings file path used in error messages.
+.OUTPUTS
+System.Boolean
+#>
 function Convert-ToBooleanValue {
     param(
         [AllowNull()]
@@ -516,6 +551,16 @@ function Convert-ToBooleanValue {
     throw ("Invalid boolean value for setting '{0}' in '{1}': {2}. Expected true/false." -f $SettingName, $SettingsPath, $valueText)
 }
 
+<#
+.SYNOPSIS
+Normalizes text to a specific line ending style.
+.PARAMETER Text
+Input text content.
+.PARAMETER LineEnding
+Target line ending (`CRLF` or `LF`).
+.OUTPUTS
+System.String
+#>
 function Convert-LineEnding {
     param(
         [AllowNull()]
@@ -537,6 +582,16 @@ function Convert-LineEnding {
     return $normalized.Replace("`n", "`r`n")
 }
 
+<#
+.SYNOPSIS
+Writes UTF-8 (without BOM) text to a file with normalized line endings.
+.PARAMETER Path
+Target file path.
+.PARAMETER Content
+File content.
+.PARAMETER LineEnding
+Target line ending (`CRLF` or `LF`).
+#>
 function Write-Utf8NoBomFile {
     param(
         [Parameter(Mandatory = $true)]
@@ -550,6 +605,7 @@ function Write-Utf8NoBomFile {
         [string]$LineEnding = "CRLF"
     )
 
+    # Keep generated files stable across environments by normalizing newlines.
     $normalizedContent = Convert-LineEnding -Text $Content -LineEnding $LineEnding
     $encoding = New-Object System.Text.UTF8Encoding($false)
     [System.IO.File]::WriteAllText($Path, $normalizedContent, $encoding)

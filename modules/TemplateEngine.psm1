@@ -4,6 +4,10 @@ $ErrorActionPreference = "Stop"
 <#
 .SYNOPSIS
 Converts an input object into a hashtable template context.
+.PARAMETER InputObject
+Source object or dictionary.
+.OUTPUTS
+System.Collections.Hashtable
 #>
 function Get-TemplateContextFromObject {
     param(
@@ -39,6 +43,12 @@ function Get-TemplateContextFromObject {
 <#
 .SYNOPSIS
 Merges template contexts where override keys replace base keys.
+.PARAMETER BaseContext
+Original context.
+.PARAMETER OverrideContext
+Context whose keys should override the base.
+.OUTPUTS
+System.Collections.Hashtable
 #>
 function Join-TemplateContext {
     param(
@@ -62,6 +72,18 @@ function Join-TemplateContext {
     return $merged
 }
 
+<#
+.SYNOPSIS
+Resolves a dot-path token from a template context.
+.DESCRIPTION
+Traverses hashtable/dictionary keys and object properties case-insensitively.
+.PARAMETER Context
+Template context map.
+.PARAMETER Path
+Dot-separated token path.
+.OUTPUTS
+PSCustomObject with `Found` and `Value`.
+#>
 function Get-TemplateValueByPath {
     param(
         [Parameter(Mandatory = $true)]
@@ -118,6 +140,16 @@ function Get-TemplateValueByPath {
     }
 }
 
+<#
+.SYNOPSIS
+Infers a singular alias name from a collection path.
+.DESCRIPTION
+Examples: `Entities` -> `Entity`, `Options` -> `Option`.
+.PARAMETER CollectionPath
+Collection token path used in a loop.
+.OUTPUTS
+System.String
+#>
 function Get-CollectionItemAlias {
     param(
         [Parameter(Mandatory = $true)]
@@ -142,6 +174,17 @@ function Get-CollectionItemAlias {
     return $leaf
 }
 
+<#
+.SYNOPSIS
+Extracts display text from Dataverse label objects.
+.DESCRIPTION
+Prefers `UserLocalizedLabel.Label`, then falls back to the first available
+entry in `LocalizedLabels`.
+.PARAMETER LabelObject
+Dataverse label object.
+.OUTPUTS
+System.String
+#>
 function Get-DisplayLabelText {
     param(
         [AllowNull()]
@@ -179,6 +222,16 @@ function Get-DisplayLabelText {
     return ""
 }
 
+<#
+.SYNOPSIS
+Converts scalar template values to text.
+.DESCRIPTION
+Booleans are emitted as lowercase `true`/`false` for TypeScript templates.
+.PARAMETER Value
+Input value.
+.OUTPUTS
+System.String
+#>
 function Convert-TemplateValueToString {
     param(
         [AllowNull()]
@@ -200,6 +253,19 @@ function Convert-TemplateValueToString {
     return [string]$Value
 }
 
+<#
+.SYNOPSIS
+Renders template content using loop and token expansion.
+.DESCRIPTION
+Expands loops first (`{{#Collection}}...{{/Collection}}`), then resolves scalar
+tokens (`{{Path.To.Value}}`).
+.PARAMETER TemplateContent
+Template text.
+.PARAMETER Context
+Template context map.
+.OUTPUTS
+System.String
+#>
 function Convert-TemplateContent {
     param(
         [Parameter(Mandatory = $true)]
@@ -242,10 +308,12 @@ function Convert-TemplateContent {
             $items = @($collection)
 
             foreach ($item in $items) {
+                # Item fields override root fields for the current loop iteration.
                 $itemContext = Get-TemplateContextFromObject -InputObject $item
                 $mergedContext = Join-TemplateContext -BaseContext $templateContext -OverrideContext $itemContext
                 $collectionItemAlias = Get-CollectionItemAlias -CollectionPath $collectionName
                 if (-not [string]::IsNullOrWhiteSpace($collectionItemAlias)) {
+                    # If a nested alias property exists, prefer it over the raw item.
                     $aliasValue = $item
                     $nestedAliasResult = ObjectTraversal\Get-ObjectPropertyValueCaseInsensitive -InputObject $item -PropertyName $collectionItemAlias
                     if ($nestedAliasResult.Found) {
@@ -283,6 +351,19 @@ function Convert-TemplateContent {
     return $withTokens
 }
 
+<#
+.SYNOPSIS
+Converts free-form text into a PascalCase identifier.
+.DESCRIPTION
+Removes diacritics, strips unsupported characters, and ensures the result is a
+valid TypeScript identifier.
+.PARAMETER Text
+Source text.
+.PARAMETER Fallback
+Fallback identifier when conversion yields an empty value.
+.OUTPUTS
+System.String
+#>
 function Convert-ToPascalIdentifier {
     param(
         [AllowNull()]
@@ -338,6 +419,16 @@ function Convert-ToPascalIdentifier {
     return $identifier
 }
 
+<#
+.SYNOPSIS
+Converts a value into a safe identifier suffix.
+.DESCRIPTION
+Only alphanumeric characters are retained; separators become underscores.
+.PARAMETER Value
+Input value.
+.OUTPUTS
+System.String
+#>
 function Convert-ToIdentifierSuffix {
     param(
         [AllowNull()]
@@ -361,6 +452,17 @@ function Convert-ToIdentifierSuffix {
     return $suffix
 }
 
+<#
+.SYNOPSIS
+Converts an option value to a TypeScript literal string.
+.DESCRIPTION
+Numbers and booleans are emitted without quotes; text values are escaped and
+quoted.
+.PARAMETER Value
+Input value.
+.OUTPUTS
+System.String
+#>
 function Convert-ToNumericOrLiteral {
     param(
         [AllowNull()]
@@ -397,6 +499,17 @@ function Convert-ToNumericOrLiteral {
     return ('"{0}"' -f $escaped)
 }
 
+<#
+.SYNOPSIS
+Builds normalized option item models for template rendering.
+.DESCRIPTION
+Generates stable keys, resolves collisions, and sets `Comma` for non-final
+items.
+.PARAMETER Options
+Raw option entries from Dataverse metadata.
+.OUTPUTS
+System.Object[]
+#>
 function Get-OptionItemModel {
     param(
         [Parameter(Mandatory = $true)]
@@ -447,10 +560,12 @@ function Get-OptionItemModel {
 
         $resolvedKey = $baseKey
         if ($counts[$countKey] -gt 1) {
+            # Colliding labels are disambiguated by raw value suffix.
             $resolvedKey = "{0}_{1}" -f $baseKey, (Convert-ToIdentifierSuffix -Value $item.RawValue)
         }
 
         if (-not $seenKeys.Add($resolvedKey)) {
+            # As a final guard, append a numeric dedupe index when needed.
             $dedupeIndex = 2
             while (-not $seenKeys.Add(("{0}_{1}" -f $resolvedKey, $dedupeIndex))) {
                 $dedupeIndex++
@@ -492,6 +607,19 @@ function Get-OptionItemModel {
     return $result.ToArray()
 }
 
+<#
+.SYNOPSIS
+Builds normalized option set models for template rendering.
+.DESCRIPTION
+Sorts option sets by attribute logical name and sets `Comma` for non-final
+entries.
+.PARAMETER EntityLogicalName
+Owning entity logical name.
+.PARAMETER OptionSetDefinitions
+Raw option set definitions from Dataverse metadata.
+.OUTPUTS
+System.Object[]
+#>
 function Get-OptionSetModel {
     param(
         [Parameter(Mandatory = $true)]
@@ -564,6 +692,7 @@ function Get-OptionSetModel {
 
         $optionSetContext = $optionSet.OptionSet
         if ($null -ne $optionSetContext) {
+            # Keep parent and nested context in sync for template token access.
             if ($optionSetContext.PSObject.Properties.Match("Comma")) {
                 $optionSetContext.Comma = $comma
             }
@@ -590,6 +719,20 @@ function Get-OptionSetModel {
 <#
 .SYNOPSIS
 Renders final TypeScript content for a single entity based on the selected template.
+.PARAMETER TemplateContent
+Template text.
+.PARAMETER EntityLogicalName
+Entity logical name.
+.PARAMETER EntitySchemaName
+Entity schema name.
+.PARAMETER EntityMetadata
+Raw entity metadata object used for additional tokens.
+.PARAMETER Attributes
+Attribute metadata items.
+.PARAMETER OptionSetDefinitions
+Option set metadata items.
+.OUTPUTS
+System.String
 #>
 function Convert-EntityTypeScriptContent {
     param(

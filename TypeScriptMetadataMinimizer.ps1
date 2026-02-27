@@ -104,6 +104,16 @@ function Convert-ToStringSet {
     return ,$set
 }
 
+<#
+.SYNOPSIS
+Reads a setting value by name from hashtable or object input.
+.PARAMETER Settings
+Settings container from `Import-PowerShellDataFile`.
+.PARAMETER Name
+Setting name to retrieve.
+.OUTPUTS
+System.Object
+#>
 function Get-SettingsPropertyValue {
     param(
         [AllowNull()]
@@ -129,6 +139,14 @@ function Get-SettingsPropertyValue {
     return $property.Value
 }
 
+<#
+.SYNOPSIS
+Converts scalar/collection input into a trimmed string array.
+.PARAMETER Value
+Input value to normalize.
+.OUTPUTS
+System.String[]
+#>
 function Convert-ToStringArray {
     param([AllowNull()][object]$Value)
 
@@ -155,6 +173,16 @@ function Convert-ToStringArray {
     return @($singleText.Trim())
 }
 
+<#
+.SYNOPSIS
+Converts an input value to boolean with strict validation.
+.PARAMETER Value
+Input value.
+.PARAMETER Context
+Context label used in error messages.
+.OUTPUTS
+System.Boolean
+#>
 function Convert-ToBool {
     param(
         [AllowNull()]
@@ -171,6 +199,14 @@ function Convert-ToBool {
     return Convert-StringToBool -Value ([string]$Value) -Context $Context
 }
 
+<#
+.SYNOPSIS
+Writes text as UTF-8 without BOM.
+.PARAMETER Path
+Target file path.
+.PARAMETER Content
+File content.
+#>
 function Write-Utf8NoBom {
     param(
         [Parameter(Mandatory = $true)]
@@ -184,6 +220,16 @@ function Write-Utf8NoBom {
     [System.IO.File]::WriteAllText($Path, $Content, $enc)
 }
 
+<#
+.SYNOPSIS
+Resolves a path to an absolute normalized filesystem path.
+.PARAMETER Path
+Input path (absolute or relative).
+.PARAMETER BasePath
+Base directory for relative paths.
+.OUTPUTS
+System.String
+#>
 function Resolve-AbsolutePath {
     param(
         [Parameter(Mandatory = $true)]
@@ -199,6 +245,19 @@ function Resolve-AbsolutePath {
     return [System.IO.Path]::GetFullPath((Join-Path -Path $BasePath -ChildPath $Path))
 }
 
+<#
+.SYNOPSIS
+Parses strict boolean-like text values.
+.DESCRIPTION
+Accepted true values: true, 1, yes, y.
+Accepted false values: false, 0, no, n.
+.PARAMETER Value
+Input text.
+.PARAMETER Context
+Context label used in error messages.
+.OUTPUTS
+System.Boolean
+#>
 function Convert-StringToBool {
     param(
         [Parameter(Mandatory = $true)]
@@ -256,6 +315,16 @@ function Convert-ScanTargetEntries {
     return $items.ToArray()
 }
 
+<#
+.SYNOPSIS
+Checks whether a path is inside a parent folder.
+.PARAMETER Path
+Candidate child path.
+.PARAMETER ParentPath
+Parent folder path.
+.OUTPUTS
+System.Boolean
+#>
 function Test-IsChildPath {
     param(
         [Parameter(Mandatory = $true)]
@@ -269,6 +338,16 @@ function Test-IsChildPath {
     return $p.StartsWith($root + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)
 }
 
+<#
+.SYNOPSIS
+Finds the matching closing brace index for an opening brace.
+.PARAMETER Text
+Source text.
+.PARAMETER OpenBraceIndex
+Index of the opening `{`.
+.OUTPUTS
+System.Int32
+#>
 function Find-CloseBrace {
     param(
         [Parameter(Mandatory = $true)]
@@ -279,6 +358,7 @@ function Find-CloseBrace {
 
     $depth = 0
     for ($i = $OpenBraceIndex; $i -lt $Text.Length; $i++) {
+        # Track nested object blocks so we match the correct closing brace.
         if ($Text[$i] -eq "{") { $depth++; continue }
         if ($Text[$i] -eq "}") {
             $depth--
@@ -289,6 +369,16 @@ function Find-CloseBrace {
     return -1
 }
 
+<#
+.SYNOPSIS
+Finds an object-assignment block and returns match metadata.
+.PARAMETER Text
+Source text.
+.PARAMETER Pattern
+Regex pattern that matches assignment prefix including opening brace.
+.OUTPUTS
+PSCustomObject or null
+#>
 function Get-ObjectAssignment {
     param(
         [Parameter(Mandatory = $true)]
@@ -316,6 +406,16 @@ function Get-ObjectAssignment {
     }
 }
 
+<#
+.SYNOPSIS
+Removes a matched object assignment block from source text.
+.PARAMETER Text
+Source text.
+.PARAMETER Assignment
+Assignment object returned by `Get-ObjectAssignment`.
+.OUTPUTS
+System.String
+#>
 function Get-TextWithoutObjectAssignment {
     param(
         [Parameter(Mandatory = $true)]
@@ -348,11 +448,31 @@ function Get-TextWithoutObjectAssignment {
     return $Text.Substring(0, $lineStart) + $Text.Substring($removeEnd)
 }
 
+<#
+.SYNOPSIS
+Returns opening-minus-closing brace count for a line.
+.PARAMETER Line
+Input line text.
+.OUTPUTS
+System.Int32
+#>
 function Get-BraceDelta {
     param([Parameter(Mandatory = $true)][string]$Line)
     return (([regex]::Matches($Line, "\{")).Count - ([regex]::Matches($Line, "\}")).Count)
 }
 
+<#
+.SYNOPSIS
+Extracts top-level object entries from an object body.
+.DESCRIPTION
+Entry boundaries are determined by brace depth and top-level closure.
+.PARAMETER Body
+Object body text without outer braces.
+.PARAMETER NewLine
+Preferred line separator for normalized entry text.
+.OUTPUTS
+System.Object[]
+#>
 function Get-TopLevelEntry {
     param(
         [Parameter(Mandatory = $true)]
@@ -372,6 +492,7 @@ function Get-TopLevelEntry {
     foreach ($line in $lines) {
         if (-not $inEntry) {
             if ($line -match "^\s*(?<key>[A-Za-z_][A-Za-z0-9_]*)\s*:") {
+                # Start of a new top-level property entry.
                 $inEntry = $true
                 $key = $matches["key"]
                 $depth = 0
@@ -390,6 +511,7 @@ function Get-TopLevelEntry {
         [void]$entryLines.Add($line)
         $depth += Get-BraceDelta -Line $line
         if ($depth -le 0) {
+            # Entry closes when brace depth returns to top level.
             [void]$entries.Add([pscustomobject]@{ Key = $key; Text = ($entryLines -join $NewLine).TrimEnd() })
             $inEntry = $false
             $entryLines.Clear()
@@ -399,6 +521,16 @@ function Get-TopLevelEntry {
     return $entries.ToArray()
 }
 
+<#
+.SYNOPSIS
+Returns top-level object keys for an assignment matched by pattern.
+.PARAMETER Text
+Source text.
+.PARAMETER Pattern
+Regex pattern that matches assignment prefix including opening brace.
+.OUTPUTS
+System.Collections.Generic.HashSet[string]
+#>
 function Get-ObjectKeysByPattern {
     param(
         [Parameter(Mandatory = $true)]
@@ -419,6 +551,16 @@ function Get-ObjectKeysByPattern {
     return ,$set
 }
 
+<#
+.SYNOPSIS
+Parses named import specifiers from an import clause.
+.DESCRIPTION
+Supports clauses like `{ A, B as C }` and returns imported/local pairs.
+.PARAMETER Clause
+Full import clause text.
+.OUTPUTS
+System.Object[]
+#>
 function Get-NamedImportSpecifier {
     param([Parameter(Mandatory = $true)][string]$Clause)
 
@@ -442,6 +584,16 @@ function Get-NamedImportSpecifier {
     return $items.ToArray()
 }
 
+<#
+.SYNOPSIS
+Extracts import leaf name from a module source path.
+.DESCRIPTION
+Strips common TypeScript/JavaScript extension suffixes.
+.PARAMETER Source
+Import source text.
+.OUTPUTS
+System.String
+#>
 function Get-ImportLeaf {
     param([Parameter(Mandatory = $true)][string]$Source)
     if ([string]::IsNullOrWhiteSpace($Source)) { return "" }
@@ -456,6 +608,18 @@ function Get-ImportLeaf {
     return $leaf
 }
 
+<#
+.SYNOPSIS
+Resolves entity logical name from generated entity metadata content.
+.DESCRIPTION
+Prefers `EntityLogicalName` constant, then exported class name, then fallback.
+.PARAMETER Content
+File content.
+.PARAMETER Fallback
+Fallback logical name.
+.OUTPUTS
+System.String
+#>
 function Get-EntityLogicalNameFromEntityMetadataFile {
     param(
         [Parameter(Mandatory = $true)]
@@ -483,6 +647,16 @@ function Get-EntityLogicalNameFromEntityMetadataFile {
     return $Fallback
 }
 
+<#
+.SYNOPSIS
+Resolves exported entity class name from metadata content.
+.PARAMETER Content
+File content.
+.PARAMETER Fallback
+Fallback class name.
+.OUTPUTS
+System.String
+#>
 function Get-EntityClassNameFromEntityMetadataFile {
     param(
         [Parameter(Mandatory = $true)]
@@ -502,6 +676,16 @@ function Get-EntityClassNameFromEntityMetadataFile {
     return $Fallback
 }
 
+<#
+.SYNOPSIS
+Resolves entity logical name from separate optionset metadata content.
+.PARAMETER Content
+File content.
+.PARAMETER Fallback
+Fallback logical name.
+.OUTPUTS
+System.String
+#>
 function Get-EntityLogicalNameFromOptionSetMetadataFile {
     param(
         [Parameter(Mandatory = $true)]
@@ -522,6 +706,16 @@ function Get-EntityLogicalNameFromOptionSetMetadataFile {
     return $Fallback
 }
 
+<#
+.SYNOPSIS
+Extracts referenced attribute keys from an entity alias usage pattern.
+.PARAMETER Content
+Source file content.
+.PARAMETER Alias
+Variable alias bound to entity metadata.
+.OUTPUTS
+System.String[]
+#>
 function Get-AttrsFromEntityAlias {
     param([Parameter(Mandatory = $true)][string]$Content, [Parameter(Mandatory = $true)][string]$Alias)
     $set = Get-StringSet
@@ -545,6 +739,16 @@ function Get-AttrsFromEntityAlias {
     return @($set)
 }
 
+<#
+.SYNOPSIS
+Extracts referenced attribute keys from an optionset map alias.
+.PARAMETER Content
+Source file content.
+.PARAMETER Alias
+Variable alias bound to optionset map.
+.OUTPUTS
+System.String[]
+#>
 function Get-AttrsFromOptionSetAlias {
     param([Parameter(Mandatory = $true)][string]$Content, [Parameter(Mandatory = $true)][string]$Alias)
     $set = Get-StringSet
@@ -556,6 +760,16 @@ function Get-AttrsFromOptionSetAlias {
     return @($set)
 }
 
+<#
+.SYNOPSIS
+Extracts referenced option set keys from an entity alias usage pattern.
+.PARAMETER Content
+Source file content.
+.PARAMETER Alias
+Variable alias bound to entity metadata.
+.OUTPUTS
+System.String[]
+#>
 function Get-OptionSetsFromEntityAlias {
     param([Parameter(Mandatory = $true)][string]$Content, [Parameter(Mandatory = $true)][string]$Alias)
     $set = Get-StringSet
@@ -579,6 +793,18 @@ function Get-OptionSetsFromEntityAlias {
     return @($set)
 }
 
+<#
+.SYNOPSIS
+Adds or removes the trailing comma on an object entry text block.
+.PARAMETER EntryText
+Entry text block.
+.PARAMETER HasTrailingComma
+Whether the entry should end with a trailing comma.
+.PARAMETER NewLine
+Preferred line separator.
+.OUTPUTS
+System.String
+#>
 function Set-EntryTrailingComma {
     param(
         [Parameter(Mandatory = $true)]
@@ -617,6 +843,16 @@ function Set-EntryTrailingComma {
     return [string]::Join($NewLine, $lines)
 }
 
+<#
+.SYNOPSIS
+Normalizes trailing comma state across top-level object entry texts.
+.PARAMETER Entries
+Top-level entries.
+.PARAMETER NewLine
+Preferred line separator.
+.OUTPUTS
+System.String[]
+#>
 function Get-NormalizedTopLevelEntryTexts {
     param(
         [Parameter(Mandatory = $true)]
@@ -637,6 +873,20 @@ function Get-NormalizedTopLevelEntryTexts {
     return $texts.ToArray()
 }
 
+<#
+.SYNOPSIS
+Filters an object assignment so only selected top-level keys remain.
+.PARAMETER Text
+Source text.
+.PARAMETER Pattern
+Regex pattern that matches assignment prefix including opening brace.
+.PARAMETER Keep
+Keys to keep.
+.PARAMETER RemoveAssignmentWhenEmpty
+Removes full assignment block when no keys are kept.
+.OUTPUTS
+PSCustomObject
+#>
 function Select-ObjectByKeepKey {
     param(
         [Parameter(Mandatory = $true)][string]$Text,
@@ -705,6 +955,18 @@ function Select-ObjectByKeepKey {
     }
 }
 
+<#
+.SYNOPSIS
+Removes per-attribute exported optionset constants from optionset files.
+.PARAMETER Text
+Source text.
+.PARAMETER Entity
+Entity logical name.
+.PARAMETER Attributes
+Attribute logical names whose constants should be removed.
+.OUTPUTS
+System.String
+#>
 function Get-TextWithoutOptionSetConstant {
     param(
         [Parameter(Mandatory = $true)][string]$Text,
@@ -722,6 +984,26 @@ function Get-TextWithoutOptionSetConstant {
     return $newText
 }
 
+<#
+.SYNOPSIS
+Applies prune logic to generated entity/optionset metadata files.
+.PARAMETER Entities
+Entities to process.
+.PARAMETER EntityFiles
+Map of entity -> entity metadata file path.
+.PARAMETER OptionSetFiles
+Map of entity -> separate optionset metadata file path.
+.PARAMETER UsedAttrsByEntity
+Map of entity -> used attribute keys.
+.PARAMETER UsedOptionSetsByEntity
+Map of entity -> used optionset keys.
+.PARAMETER ScanEntityOptionSets
+Whether to prune `public static optionsets` in entity files.
+.PARAMETER ScanSeparateOptionSetFiles
+Whether to prune separate `*.optionset.ts` files.
+.OUTPUTS
+System.Object[]
+#>
 function Invoke-PrunePass {
     param(
         [Parameter(Mandatory = $true)]
