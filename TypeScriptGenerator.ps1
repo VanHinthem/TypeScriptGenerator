@@ -21,6 +21,29 @@ param(
 )
 
 Set-StrictMode -Version Latest
+
+trap {
+    $lineNumber = 0
+    if ($null -ne $_.InvocationInfo) {
+        $lineNumber = [int]$_.InvocationInfo.ScriptLineNumber
+    }
+
+    $lineText = ""
+    if ($null -ne $_.InvocationInfo -and -not [string]::IsNullOrWhiteSpace([string]$_.InvocationInfo.Line)) {
+        $lineText = [string]$_.InvocationInfo.Line
+    }
+
+    Write-Error ("Unhandled error on line {0}: {1}" -f $lineNumber, $_.Exception.Message)
+    if (-not [string]::IsNullOrWhiteSpace($lineText)) {
+        Write-Error ("Failing line: {0}" -f $lineText.Trim())
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace([string]$_.ScriptStackTrace)) {
+        Write-Error ("Script stack: {0}" -f $_.ScriptStackTrace)
+    }
+
+    break
+}
 $ErrorActionPreference = "Stop"
 
 <#
@@ -372,8 +395,28 @@ function Resolve-EntityPathTokenValue {
                     continue
                 }
 
-                if (-not $entityContext.PSObject.Properties.Match([string]$property.Name)) {
-                    Add-Member -InputObject $entityContext -MemberType NoteProperty -Name ([string]$property.Name) -Value $property.Value
+                $propertyName = [string]$property.Name
+                if ([string]::IsNullOrWhiteSpace($propertyName)) {
+                    continue
+                }
+
+                if ($entityContext.PSObject.Properties.Match($propertyName).Count -gt 0) {
+                    continue
+                }
+
+                try {
+                    $propertyValue = $property.Value
+                }
+                catch {
+                    Write-Verbose ("Skipping output-path token source property '{0}' for entity '{1}': {2}" -f $propertyName, $EntityLogicalName, $_.Exception.Message)
+                    continue
+                }
+
+                try {
+                    Add-Member -InputObject $entityContext -MemberType NoteProperty -Name $propertyName -Value $propertyValue -ErrorAction Stop
+                }
+                catch {
+                    Write-Verbose ("Skipping output-path token source property '{0}' for entity '{1}': {2}" -f $propertyName, $EntityLogicalName, $_.Exception.Message)
                 }
             }
         }
@@ -1205,10 +1248,14 @@ foreach ($entityGenerationItem in $entityGenerationItems) {
 
 # Generate run-once templates that use full-collection context.
 if ($globalTemplateDefinitions.Count -gt 0) {
+    Write-Verbose ("Generating global templates. Templates={0}, Entities={1}" -f $globalTemplateDefinitions.Count, $entityGenerationItems.Count)
+
     $globalEntityModels = New-Object System.Collections.Generic.List[object]
-    foreach ($entityGenerationItem in @($entityGenerationItems)) {
+    foreach ($entityGenerationItem in $entityGenerationItems) {
         $entityLogicalName = [string]$entityGenerationItem.EntityLogicalName
         $entitySchemaName = [string]$entityGenerationItem.EntitySchemaName
+        $optionSetCount = @($entityGenerationItem.OptionSetDefinitions).Count
+        Write-Verbose ("Preparing global context for entity '{0}' (OptionSets={1})." -f $entityLogicalName, $optionSetCount)
 
         $entityDisplayName = Get-EntityDisplayNameText `
             -EntityMetadata $entityGenerationItem.EntityMetadata `
@@ -1220,22 +1267,11 @@ if ($globalTemplateDefinitions.Count -gt 0) {
             DisplayName = $entityDisplayName
         }
 
-        if ($null -ne $entityGenerationItem.EntityMetadata) {
-            foreach ($property in $entityGenerationItem.EntityMetadata.PSObject.Properties) {
-                if ($null -eq $property) {
-                    continue
-                }
-
-                if (-not $entityContext.PSObject.Properties.Match([string]$property.Name)) {
-                    Add-Member -InputObject $entityContext -MemberType NoteProperty -Name ([string]$property.Name) -Value $property.Value
-                }
-            }
-        }
-
         [void]$globalEntityModels.Add([pscustomobject]@{
             LogicalName = $entityContext.LogicalName
             SchemaName  = $entityContext.SchemaName
             DisplayName = $entityContext.DisplayName
+            OptionSets  = @($entityGenerationItem.OptionSetDefinitions)
             Entity      = $entityContext
         })
     }
@@ -1243,18 +1279,29 @@ if ($globalTemplateDefinitions.Count -gt 0) {
     $globalContext = @{
         Entities = $globalEntityModels.ToArray()
     }
+    Write-Verbose ("Global context prepared. Entities={0}" -f @($globalContext.Entities).Count)
 
     foreach ($templateDefinition in @($globalTemplateDefinitions)) {
-        $outputRelativePath = [string]$templateDefinition.ResolvedGlobalOutputRelativePath
-        if ([string]::IsNullOrWhiteSpace($outputRelativePath)) {
-            $outputRelativePath = Resolve-OutputRelativePath `
-                -Pattern ([string]$templateDefinition.OutputRelativePathPattern) `
-                -EntityLogicalName "__entity__" `
-                -EntitySchemaName "__entity__"
+        $templatePath = [string]$templateDefinition.TemplatePath
+        $outputPattern = [string]$templateDefinition.OutputRelativePathPattern
+        Write-Verbose ("Rendering global template '{0}' (OutputPattern='{1}')." -f $templatePath, $outputPattern)
+
+        try {
+            $outputRelativePath = [string]$templateDefinition.ResolvedGlobalOutputRelativePath
+            if ([string]::IsNullOrWhiteSpace($outputRelativePath)) {
+                $outputRelativePath = Resolve-OutputRelativePath `
+                    -Pattern $outputPattern `
+                    -EntityLogicalName "__entity__" `
+                    -EntitySchemaName "__entity__"
+            }
+        }
+        catch {
+            throw ("Could not resolve global output path for template '{0}' (pattern '{1}'): {2}" -f $templatePath, $outputPattern, $_.Exception.Message)
         }
 
         $outputFilePath = Join-Path $TypeScriptOutputPath $outputRelativePath
         $outputFilePath = [System.IO.Path]::GetFullPath($outputFilePath)
+        Write-Verbose ("Global output path resolved: {0}" -f $outputFilePath)
 
         if (-not $generatedOutputFilePathSet.Add($outputFilePath)) {
             throw ("Duplicate output path generated: {0}. Check template file names/subfolders and token usage." -f $outputFilePath)
@@ -1271,10 +1318,16 @@ if ($globalTemplateDefinitions.Count -gt 0) {
             continue
         }
 
-        $generatedContent = TemplateEngine\Convert-TemplateContentWithContext `
-            -TemplateContent ([string]$templateDefinition.TemplateContent) `
-            -Context $globalContext
+        try {
+            $generatedContent = TemplateEngine\Convert-TemplateContentWithContext `
+                -TemplateContent ([string]$templateDefinition.TemplateContent) `
+                -Context $globalContext
+        }
+        catch {
+            throw ("Could not render global template '{0}' to '{1}': {2}" -f $templatePath, $outputFilePath, $_.Exception.Message)
+        }
 
+        Write-Verbose ("Global template rendered '{0}' (Chars={1})." -f $templatePath, $generatedContent.Length)
         Write-Verbose ("Writing generated global file: {0}" -f $outputFilePath)
         Write-Utf8NoBomFile -Path $outputFilePath -Content $generatedContent -LineEnding "CRLF"
         $generatedFileCount++

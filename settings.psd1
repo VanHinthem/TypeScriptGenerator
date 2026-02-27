@@ -3,7 +3,7 @@
     TenantId            = 'organizations'
     ClientId            = '51f81489-12ee-4a9e-aaae-a2591f45987d'
     RedirectUri         = 'http://localhost'
-    Template            = 'default'
+    Template            = 'entityfolder'
     TypeScriptOutputPath = '.\generated'
     Clean               = $true
     Overwrite           = $true

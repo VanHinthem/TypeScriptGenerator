@@ -2,9 +2,6 @@
 param(
     [string[]]$SourceFolders,
 
-    [ValidateSet("auto", "default", "onefile")]
-    [string]$Template = "auto",
-
     [string]$GeneratedMetadataPath = ".\generated",
     [bool]$DefaultRecursive = $true,
     [switch]$PruneMetadata,
@@ -984,6 +981,179 @@ function Get-TextWithoutOptionSetConstant {
     return $newText
 }
 
+
+function Get-OptionSetKeysFromEntityMetadataContent {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Content
+    )
+
+    $keys = Get-ObjectKeysByPattern -Text $Content -Pattern "public\s+static\s+optionsets\s*=\s*\{"
+    return @($keys | ForEach-Object { [string]$_ })
+}
+
+function Get-OptionSetKeysFromOptionSetContent {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Content,
+        [Parameter(Mandatory = $true)]
+        [string]$EntityLogicalName
+    )
+
+    $mapPattern = "export\s+const\s+" + [regex]::Escape($EntityLogicalName + "OptionSets") + "\s*=\s*\{"
+    $keys = Get-ObjectKeysByPattern -Text $Content -Pattern $mapPattern
+    return @($keys | ForEach-Object { [string]$_ })
+}
+
+function Sync-GeneratedMetadataBarrelIndexes {
+    param(
+        [Parameter(Mandatory = $true)]
+        [hashtable]$EntityFiles,
+
+        [Parameter(Mandatory = $true)]
+        [hashtable]$OptionSetFiles,
+
+        [Parameter(Mandatory = $true)]
+        [bool]$ScanEntityOptionSets,
+
+        [Parameter(Mandatory = $true)]
+        [bool]$ScanSeparateOptionSetFiles,
+
+        [Parameter(Mandatory = $true)]
+        [string]$GeneratedMetadataPath
+    )
+
+    $summary = New-Object System.Collections.Generic.List[object]
+    $entityStates = @{}
+    $allEntities = @($EntityFiles.Keys | Sort-Object)
+
+    foreach ($entity in $allEntities) {
+        if (-not $EntityFiles.ContainsKey($entity)) { continue }
+
+        $entityFilePath = [string]$EntityFiles[$entity]
+        if ([string]::IsNullOrWhiteSpace($entityFilePath) -or -not (Test-Path -LiteralPath $entityFilePath -PathType Leaf)) {
+            continue
+        }
+
+        $optionSetKeys = Get-StringSet
+
+        if ($ScanEntityOptionSets) {
+            $entityContent = Get-Content -LiteralPath $entityFilePath -Raw
+            foreach ($key in @(Get-OptionSetKeysFromEntityMetadataContent -Content $entityContent)) {
+                if (-not [string]::IsNullOrWhiteSpace([string]$key)) {
+                    [void]$optionSetKeys.Add([string]$key)
+                }
+            }
+        }
+
+        $hasSeparateOptionSetFile = $false
+        if ($ScanSeparateOptionSetFiles -and $OptionSetFiles.ContainsKey($entity)) {
+            $optionSetPath = [string]$OptionSetFiles[$entity]
+            if (-not [string]::IsNullOrWhiteSpace($optionSetPath) -and (Test-Path -LiteralPath $optionSetPath -PathType Leaf)) {
+                $hasSeparateOptionSetFile = $true
+                $optionSetContent = Get-Content -LiteralPath $optionSetPath -Raw
+                foreach ($key in @(Get-OptionSetKeysFromOptionSetContent -Content $optionSetContent -EntityLogicalName $entity)) {
+                    if (-not [string]::IsNullOrWhiteSpace([string]$key)) {
+                        [void]$optionSetKeys.Add([string]$key)
+                    }
+                }
+            }
+        }
+        $sortedOptionSetKeys = @($optionSetKeys | Sort-Object)
+        $entityStates[$entity] = [pscustomobject]@{
+            EntityLogicalName       = $entity
+            HasSeparateOptionSetFile = $hasSeparateOptionSetFile
+            OptionSetKeys           = $sortedOptionSetKeys
+        }
+
+        $entityIndexPath = Join-Path -Path (Split-Path -Path $entityFilePath -Parent) -ChildPath "index.ts"
+        if (-not (Test-Path -LiteralPath $entityIndexPath -PathType Leaf)) {
+            continue
+        }
+
+        $existingEntityIndexContent = Get-Content -LiteralPath $entityIndexPath -Raw
+        $isManagedEntityIndex = -not $existingEntityIndexContent.Contains("{{") -and [regex]::IsMatch($existingEntityIndexContent, '(?m)^\s*export\s+\{[\s\S]*?\}\s+from\s+["'']\./')
+        if (-not $isManagedEntityIndex) {
+            Write-Verbose ("Skipping entity index rewrite for '{0}' because file is not recognized as generated barrel format: {1}" -f $entity, $entityIndexPath)
+            continue
+        }
+
+        $entityIndexLines = New-Object System.Collections.Generic.List[string]
+        [void]$entityIndexLines.Add('export { ' + $entity + ' } from "./' + $entity + '";')
+
+        if ($hasSeparateOptionSetFile) {
+            [void]$entityIndexLines.Add('export { ' + $entity + 'OptionSets } from "./' + $entity + '.optionset";')
+            foreach ($optionSetKey in $sortedOptionSetKeys) {
+                [void]$entityIndexLines.Add('export { ' + $entity + 'OptionSet_' + $optionSetKey + ' } from "./' + $entity + '.optionset";')
+            }
+        }
+
+        $newEntityIndexContent = [string]::Join("`r`n", $entityIndexLines.ToArray()) + "`r`n"
+        $entityIndexChanged = $newEntityIndexContent -ne $existingEntityIndexContent
+        if ($entityIndexChanged) {
+            Write-Utf8NoBom -Path $entityIndexPath -Content $newEntityIndexContent
+        }
+
+        [void]$summary.Add([pscustomobject]@{
+            EntityLogicalName = $entity
+            Target            = "EntityIndexFile"
+            FilePath          = $entityIndexPath
+            Changed           = $entityIndexChanged
+        })
+    }
+
+    $rootIndexPath = Join-Path -Path $GeneratedMetadataPath -ChildPath "index.ts"
+    if (Test-Path -LiteralPath $rootIndexPath -PathType Leaf) {
+        $existingRootIndexContent = Get-Content -LiteralPath $rootIndexPath -Raw
+        $isManagedRootIndex = -not $existingRootIndexContent.Contains("{{") -and [regex]::IsMatch($existingRootIndexContent, '(?m)^\s*export\s+\{[\s\S]*?\}\s+from\s+["'']\./[^/"'']+["''];\s*$')
+
+        if ($isManagedRootIndex) {
+            $rootLines = New-Object System.Collections.Generic.List[string]
+            $stateList = @($allEntities | ForEach-Object { if ($entityStates.ContainsKey($_)) { $entityStates[$_] } } | Where-Object { $null -ne $_ })
+            for ($index = 0; $index -lt $stateList.Count; $index++) {
+                $state = $stateList[$index]
+                $entity = [string]$state.EntityLogicalName
+                $line = 'export { ' + $entity
+                if ([bool]$state.HasSeparateOptionSetFile) {
+                    $line += ', ' + $entity + 'OptionSets'
+                    foreach ($optionSetKey in @($state.OptionSetKeys)) {
+                        $line += ', ' + $entity + 'OptionSet_' + $optionSetKey
+                    }
+                }
+
+                $line += ' } from "./' + $entity + '";'
+                [void]$rootLines.Add($line)
+                if ($index -lt ($stateList.Count - 1)) {
+                    [void]$rootLines.Add("")
+                }
+            }
+
+            $newRootIndexContent = if ($rootLines.Count -gt 0) {
+                [string]::Join("`r`n", $rootLines.ToArray()) + "`r`n"
+            }
+            else {
+                ""
+            }
+
+            $rootIndexChanged = $newRootIndexContent -ne $existingRootIndexContent
+            if ($rootIndexChanged) {
+                Write-Utf8NoBom -Path $rootIndexPath -Content $newRootIndexContent
+            }
+
+            [void]$summary.Add([pscustomobject]@{
+                EntityLogicalName = "*"
+                Target            = "RootIndexFile"
+                FilePath          = $rootIndexPath
+                Changed           = $rootIndexChanged
+            })
+        }
+        else {
+            Write-Verbose ("Skipping root index rewrite because file is not recognized as generated barrel format: {0}" -f $rootIndexPath)
+        }
+    }
+
+    return $summary.ToArray()
+}
 <#
 .SYNOPSIS
 Applies prune logic to generated entity/optionset metadata files.
@@ -1025,7 +1195,9 @@ function Invoke-PrunePass {
         [bool]$ScanEntityOptionSets,
 
         [Parameter(Mandatory = $true)]
-        [bool]$ScanSeparateOptionSetFiles
+        [bool]$ScanSeparateOptionSetFiles,
+        [Parameter(Mandatory = $true)]
+        [string]$GeneratedMetadataPath
     )
 
     # Prune each entity file first, then optional separate optionset file.
@@ -1121,6 +1293,17 @@ function Invoke-PrunePass {
         }
     }
 
+    $barrelSyncSummary = Sync-GeneratedMetadataBarrelIndexes `
+        -EntityFiles $EntityFiles `
+        -OptionSetFiles $OptionSetFiles `
+        -ScanEntityOptionSets $ScanEntityOptionSets `
+        -ScanSeparateOptionSetFiles $ScanSeparateOptionSetFiles `
+        -GeneratedMetadataPath $GeneratedMetadataPath
+
+    foreach ($summaryItem in @($barrelSyncSummary)) {
+        [void]$items.Add($summaryItem)
+    }
+
     return $items.ToArray()
 }
 
@@ -1157,18 +1340,6 @@ if ((Get-CountSafe -Value $SourceFolders) -eq 0) {
     throw ("No SourceFolders provided. Use -SourceFolders or set SourceFolders in '{0}'." -f $resolvedSettingsPath)
 }
 
-if (-not $PSBoundParameters.ContainsKey("Template")) {
-    $settingsTemplate = [string](Get-SettingsPropertyValue -Settings $settings -Name "Template")
-    if ([string]::IsNullOrWhiteSpace($settingsTemplate)) {
-        throw ("Template is required in settings file '{0}' when -Template is not provided." -f $resolvedSettingsPath)
-    }
-
-    $Template = $settingsTemplate.Trim().ToLowerInvariant()
-}
-
-if ($Template -notin @("auto", "default", "onefile")) {
-    throw ("Invalid Template value '{0}'. Allowed values: auto, default, onefile." -f $Template)
-}
 
 if (-not $PSBoundParameters.ContainsKey("GeneratedMetadataPath")) {
     $settingsGeneratedPath = [string](Get-SettingsPropertyValue -Settings $settings -Name "TypeScriptOutputPath")
@@ -1203,24 +1374,9 @@ if (-not (Test-Path -LiteralPath $generatedPath -PathType Container)) {
 $targets = @(Convert-ScanTargetEntries -Entries $SourceFolders -DefaultRecursive $DefaultRecursive -BasePath $scriptRoot)
 if ($targets.Count -eq 0) { throw "No valid source folders found." }
 
-$templateMode = if ([string]::IsNullOrWhiteSpace($Template)) { "auto" } else { $Template.ToLowerInvariant() }
-$scanEntityOptionSets = $false
-$scanSeparateOptionSetFiles = $false
-switch ($templateMode) {
-    "default" {
-        $scanSeparateOptionSetFiles = $true
-        break
-    }
-    "onefile" {
-        $scanEntityOptionSets = $true
-        break
-    }
-    default {
-        $scanEntityOptionSets = $true
-        $scanSeparateOptionSetFiles = $true
-        break
-    }
-}
+$scanMode = "template-independent"
+$scanEntityOptionSets = $true
+$scanSeparateOptionSetFiles = $true
 
 $entityFiles = @{}
 $optionSetFiles = @{}
@@ -1234,9 +1390,23 @@ foreach ($f in (Get-ChildItem -LiteralPath $generatedPath -File -Recurse -Filter
     if ($f.Name.EndsWith(".d.ts", [System.StringComparison]::OrdinalIgnoreCase)) { continue }
     $content = Get-Content -LiteralPath $f.FullName -Raw
 
+    $hasEntityLogicalNameConst = [regex]::IsMatch($content, '(?im)\bpublic\s+static\s+EntityLogicalName\s*=')
+    $hasAttributesMap = [regex]::IsMatch($content, '(?im)\bpublic\s+static\s+attributes\s*=\s*\{')
+    $hasEntityOptionSetsMap = [regex]::IsMatch($content, '(?im)\bpublic\s+static\s+optionsets\s*=\s*\{')
+    $hasOptionSetMap = [regex]::IsMatch($content, '(?im)^\s*export\s+const\s+[A-Za-z_$][A-Za-z0-9_$]*OptionSets\s*=')
+
+    if (-not $hasOptionSetMap -and -not $hasEntityLogicalNameConst -and -not $hasAttributesMap -and -not $hasEntityOptionSetsMap) {
+        Write-Verbose ("Skipping non-metadata generated TypeScript file: {0}" -f $f.FullName)
+        continue
+    }
+
     $fallbackOptionSetEntity = [System.IO.Path]::GetFileNameWithoutExtension([System.IO.Path]::GetFileNameWithoutExtension($f.Name))
-    $entityFromOptionSetMap = Get-EntityLogicalNameFromOptionSetMetadataFile -Content $content -Fallback ""
-    $isOptionSetFile = -not [string]::IsNullOrWhiteSpace($entityFromOptionSetMap)
+    $entityFromOptionSetMap = ""
+    $isOptionSetFile = $false
+    if ($hasOptionSetMap) {
+        $entityFromOptionSetMap = Get-EntityLogicalNameFromOptionSetMetadataFile -Content $content -Fallback ""
+        $isOptionSetFile = -not [string]::IsNullOrWhiteSpace($entityFromOptionSetMap)
+    }
     if (-not $isOptionSetFile -and $f.Name.EndsWith(".optionset.ts", [System.StringComparison]::OrdinalIgnoreCase)) {
         $entityFromOptionSetMap = Get-EntityLogicalNameFromOptionSetMetadataFile -Content $content -Fallback $fallbackOptionSetEntity
         $isOptionSetFile = $true
@@ -1525,7 +1695,8 @@ if ($pruneEnabled) {
         -UsedAttrsByEntity $usedAttrsByEntity `
         -UsedOptionSetsByEntity $usedOptionSetsByEntity `
         -ScanEntityOptionSets $scanEntityOptionSets `
-        -ScanSeparateOptionSetFiles $scanSeparateOptionSetFiles
+        -ScanSeparateOptionSetFiles $scanSeparateOptionSetFiles `
+        -GeneratedMetadataPath $generatedPath
     $pruneExecuted = $true
 }
 
@@ -1542,7 +1713,7 @@ foreach ($entityReport in (@($entityReports.ToArray()) | Sort-Object EntityLogic
 
 Write-Output ("Scanned source files: {0}" -f $sourceFiles.Count)
 Write-Output ("Entities found: {0}" -f $entityReports.Count)
-Write-Output ("Template mode: {0}" -f $templateMode)
+Write-Output ("Scan mode: template-independent")
 if ($targetReport.Count -gt 0) {
     Write-Output "Source folder scan summary:"
     @($targetReport.ToArray() | Sort-Object Path) | Format-Table -AutoSize Path, Recursive, SourceFileCount
@@ -1593,7 +1764,8 @@ if (-not $pruneExecuted) {
                 -UsedAttrsByEntity $usedAttrsByEntity `
                 -UsedOptionSetsByEntity $usedOptionSetsByEntity `
                 -ScanEntityOptionSets $scanEntityOptionSets `
-                -ScanSeparateOptionSetFiles $scanSeparateOptionSetFiles
+                -ScanSeparateOptionSetFiles $scanSeparateOptionSetFiles `
+                -GeneratedMetadataPath $generatedPath
 
             $updatedFileCount = (@($pruneSummary | Where-Object { $_.Changed })).Count
             Write-Output ("Prune completed. Updated files: {0}" -f $updatedFileCount)

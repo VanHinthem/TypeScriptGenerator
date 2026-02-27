@@ -34,7 +34,17 @@ function Get-TemplateContextFromObject {
             continue
         }
 
-        $context[[string]$property.Name] = $property.Value
+        $propertyName = [string]$property.Name
+        if ([string]::IsNullOrWhiteSpace($propertyName)) {
+            continue
+        }
+
+        try {
+            $context[$propertyName] = $property.Value
+        }
+        catch {
+            continue
+        }
     }
 
     return $context
