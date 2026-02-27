@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param(
     [string[]]$SourceFolders,
 
@@ -1196,7 +1196,8 @@ if (-not $PSBoundParameters.ContainsKey("PruneMetadata")) {
 
 $generatedPath = Resolve-AbsolutePath -Path $GeneratedMetadataPath -BasePath $scriptRoot
 if (-not (Test-Path -LiteralPath $generatedPath -PathType Container)) {
-    throw ("Generated metadata folder not found: {0}" -f $generatedPath)
+    Write-Warning ("Generated metadata folder not found: {0}" -f $generatedPath)
+    return
 }
 
 $targets = @(Convert-ScanTargetEntries -Entries $SourceFolders -DefaultRecursive $DefaultRecursive -BasePath $scriptRoot)
@@ -1276,7 +1277,8 @@ foreach ($f in (Get-ChildItem -LiteralPath $generatedPath -File -Recurse -Filter
 }
 
 if ($entityFiles.Count -eq 0) {
-    throw ("No entity metadata files found in: {0}" -f $generatedPath)
+    Write-Warning ("No entity metadata files found in: {0}" -f $generatedPath)
+    return
 }
 
 foreach ($entity in $entityFiles.Keys) {
