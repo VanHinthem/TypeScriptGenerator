@@ -350,7 +350,35 @@ function Convert-TemplateContent {
 
     return $withTokens
 }
+<#
+.SYNOPSIS
+Renders template content from an explicit context object.
+.PARAMETER TemplateContent
+Template text.
+.PARAMETER Context
+Root context object or hashtable.
+.OUTPUTS
+System.String
+#>
+function Convert-TemplateContentWithContext {
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyString()]
+        [string]$TemplateContent,
 
+        [AllowNull()]
+        [object]$Context = $null
+    )
+
+    $normalizedContext = if ($Context -is [hashtable]) {
+        $Context
+    }
+    else {
+        Get-TemplateContextFromObject -InputObject $Context
+    }
+
+    return Convert-TemplateContent -TemplateContent $TemplateContent -Context $normalizedContext
+}
 <#
 .SYNOPSIS
 Converts free-form text into a PascalCase identifier.
@@ -864,4 +892,4 @@ function Convert-EntityTypeScriptContent {
     return Convert-TemplateContent -TemplateContent $TemplateContent -Context $context
 }
 
-Export-ModuleMember -Function Convert-EntityTypeScriptContent
+Export-ModuleMember -Function Convert-EntityTypeScriptContent, Convert-TemplateContentWithContext

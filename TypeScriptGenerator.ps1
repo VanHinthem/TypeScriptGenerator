@@ -611,6 +611,43 @@ function Write-Utf8NoBomFile {
     [System.IO.File]::WriteAllText($Path, $normalizedContent, $encoding)
 }
 
+<#
+.SYNOPSIS
+Checks whether a template output path pattern contains token expressions.
+.PARAMETER OutputRelativePathPattern
+Relative output path pattern from template file path.
+.OUTPUTS
+System.Boolean
+#>
+function Test-TemplatePathContainsToken {
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyString()]
+        [string]$OutputRelativePathPattern
+    )
+
+    return [regex]::IsMatch($OutputRelativePathPattern, "{{\s*[A-Za-z0-9_.]+\s*}}")
+}
+
+<#
+.SYNOPSIS
+Checks whether template content contains an `Entities` loop block.
+.PARAMETER TemplateContent
+Template text.
+.OUTPUTS
+System.Boolean
+#>
+function Test-TemplateContentHasEntitiesLoop {
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyString()]
+        [string]$TemplateContent
+    )
+
+    $entitiesLoopPattern = [regex]"(?s){{#\s*Entities\s*}}[\s\S]*?{{/\s*Entities\s*}}"
+    return $entitiesLoopPattern.IsMatch($TemplateContent)
+}
+
 # Import required modules from the local modules folder to keep path behavior deterministic.
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $moduleFiles = @(
@@ -793,10 +830,24 @@ foreach ($templateFilePath in @($templateSetFiles.TemplateFiles)) {
         -TemplateSetPath $templateSetFiles.TemplateSetPath `
         -ResolvedTemplatePath $templateFilePath
 
+    $pathHasToken = Test-TemplatePathContainsToken -OutputRelativePathPattern $outputRelativePathPattern
+    $hasEntitiesLoop = Test-TemplateContentHasEntitiesLoop -TemplateContent $templateContent
+    $generationMode = "PerEntity"
+    $resolvedGlobalOutputRelativePath = $null
+    if ((-not $pathHasToken) -and $hasEntitiesLoop) {
+        $generationMode = "Global"
+        $resolvedGlobalOutputRelativePath = Resolve-OutputRelativePath `
+            -Pattern $outputRelativePathPattern `
+            -EntityLogicalName "__entity__" `
+            -EntitySchemaName "__entity__"
+    }
+
     [void]$templateDefinitions.Add([pscustomobject]@{
-        TemplatePath               = $templateFilePath
-        TemplateContent            = $templateContent
-        OutputRelativePathPattern  = $outputRelativePathPattern
+        TemplatePath                      = $templateFilePath
+        TemplateContent                   = $templateContent
+        OutputRelativePathPattern         = $outputRelativePathPattern
+        GenerationMode                    = $generationMode
+        ResolvedGlobalOutputRelativePath  = $resolvedGlobalOutputRelativePath
     })
 }
 
@@ -1103,15 +1154,17 @@ if ($templateDefinitions.Count -eq 0) {
 $generatedOutputFilePathSet = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
 $generatedFileCount = 0
 $skippedExistingFileCount = 0
-# Generate output for each (entity × template file) combination.
+$perEntityTemplateDefinitions = @($templateDefinitions.ToArray() | Where-Object { [string]$_.GenerationMode -eq "PerEntity" })
+$globalTemplateDefinitions = @($templateDefinitions.ToArray() | Where-Object { [string]$_.GenerationMode -eq "Global" })
+# Generate output for each (entity x template file) combination.
 
 foreach ($entityGenerationItem in $entityGenerationItems) {
     $entityLogicalName = [string]$entityGenerationItem.EntityLogicalName
     $entitySchemaName = [string]$entityGenerationItem.EntitySchemaName
 
-    Write-Output ("Generating entity: {0}" -f $entityLogicalName)
+    if ($perEntityTemplateDefinitions.Count -gt 0) { Write-Output ("Generating entity: {0}" -f $entityLogicalName) }
 
-    foreach ($templateDefinition in @($templateDefinitions.ToArray())) {
+    foreach ($templateDefinition in @($perEntityTemplateDefinitions)) {
         $generatedContent = Convert-EntityTypeScriptContent `
             -TemplateContent ([string]$templateDefinition.TemplateContent) `
             -EntityLogicalName $entityLogicalName `
@@ -1145,6 +1198,84 @@ foreach ($entityGenerationItem in $entityGenerationItems) {
         }
 
         Write-Verbose ("Writing generated file: {0}" -f $outputFilePath)
+        Write-Utf8NoBomFile -Path $outputFilePath -Content $generatedContent -LineEnding "CRLF"
+        $generatedFileCount++
+    }
+}
+
+# Generate run-once templates that use full-collection context.
+if ($globalTemplateDefinitions.Count -gt 0) {
+    $globalEntityModels = New-Object System.Collections.Generic.List[object]
+    foreach ($entityGenerationItem in @($entityGenerationItems)) {
+        $entityLogicalName = [string]$entityGenerationItem.EntityLogicalName
+        $entitySchemaName = [string]$entityGenerationItem.EntitySchemaName
+
+        $entityDisplayName = Get-EntityDisplayNameText `
+            -EntityMetadata $entityGenerationItem.EntityMetadata `
+            -Fallback $entityLogicalName
+
+        $entityContext = [pscustomobject]@{
+            LogicalName = $entityLogicalName
+            SchemaName  = $entitySchemaName
+            DisplayName = $entityDisplayName
+        }
+
+        if ($null -ne $entityGenerationItem.EntityMetadata) {
+            foreach ($property in $entityGenerationItem.EntityMetadata.PSObject.Properties) {
+                if ($null -eq $property) {
+                    continue
+                }
+
+                if (-not $entityContext.PSObject.Properties.Match([string]$property.Name)) {
+                    Add-Member -InputObject $entityContext -MemberType NoteProperty -Name ([string]$property.Name) -Value $property.Value
+                }
+            }
+        }
+
+        [void]$globalEntityModels.Add([pscustomobject]@{
+            LogicalName = $entityContext.LogicalName
+            SchemaName  = $entityContext.SchemaName
+            DisplayName = $entityContext.DisplayName
+            Entity      = $entityContext
+        })
+    }
+
+    $globalContext = @{
+        Entities = $globalEntityModels.ToArray()
+    }
+
+    foreach ($templateDefinition in @($globalTemplateDefinitions)) {
+        $outputRelativePath = [string]$templateDefinition.ResolvedGlobalOutputRelativePath
+        if ([string]::IsNullOrWhiteSpace($outputRelativePath)) {
+            $outputRelativePath = Resolve-OutputRelativePath `
+                -Pattern ([string]$templateDefinition.OutputRelativePathPattern) `
+                -EntityLogicalName "__entity__" `
+                -EntitySchemaName "__entity__"
+        }
+
+        $outputFilePath = Join-Path $TypeScriptOutputPath $outputRelativePath
+        $outputFilePath = [System.IO.Path]::GetFullPath($outputFilePath)
+
+        if (-not $generatedOutputFilePathSet.Add($outputFilePath)) {
+            throw ("Duplicate output path generated: {0}. Check template file names/subfolders and token usage." -f $outputFilePath)
+        }
+
+        $outputDirectory = Split-Path -Path $outputFilePath -Parent
+        if (-not [string]::IsNullOrWhiteSpace($outputDirectory) -and -not (Test-Path -LiteralPath $outputDirectory)) {
+            New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
+        }
+
+        if ((Test-Path -LiteralPath $outputFilePath) -and (-not $Overwrite)) {
+            Write-Verbose ("Skipping existing file because Overwrite=false: {0}" -f $outputFilePath)
+            $skippedExistingFileCount++
+            continue
+        }
+
+        $generatedContent = TemplateEngine\Convert-TemplateContentWithContext `
+            -TemplateContent ([string]$templateDefinition.TemplateContent) `
+            -Context $globalContext
+
+        Write-Verbose ("Writing generated global file: {0}" -f $outputFilePath)
         Write-Utf8NoBomFile -Path $outputFilePath -Content $generatedContent -LineEnding "CRLF"
         $generatedFileCount++
     }

@@ -1,4 +1,4 @@
-﻿# TypeScriptGenerator
+# TypeScriptGenerator
 
 Generate TypeScript metadata from Dataverse.
 
@@ -73,6 +73,8 @@ Template discovery and output mapping:
 - each template file generates one output file per selected entity
 - output relative path pattern = template file relative path inside the template set
 - folder names and file names may contain tokens
+- templates with tokenized relative paths are generated per entity
+- templates with non-tokenized relative paths that contain an `{{#Entities}}...{{/Entities}}` loop are generated once using the full entity collection
 
 Template file names can contain tokens and are used as output file name patterns:
 
