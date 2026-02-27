@@ -14,6 +14,6 @@ export class {{Entity.LogicalName}} {
 {{#Attributes}}        {{Attribute.Key}}: {
             SchemaName: "{{Attribute.SchemaName}}",
             LogicalName: "{{Attribute.LogicalName}}",
-        },
+        }{{Attribute.Comma}}
 {{/Attributes}}    };
 }

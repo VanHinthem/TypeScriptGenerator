@@ -530,6 +530,7 @@ function Get-OptionSetModel {
             AttributeKey = $attributeLogicalName
             Name = $optionSetName
             IsGlobal = $isGlobal
+            Comma = ""
             Options = $optionItemModels
         }
 
@@ -554,15 +555,32 @@ function Get-OptionSetModel {
     $sortedOptionSets = @($rawOptionSets.ToArray() | Sort-Object OptionSetAttributeLogicalName)
     $optionSetModels = New-Object System.Collections.Generic.List[object]
 
-    foreach ($optionSet in $sortedOptionSets) {
+    for ($index = 0; $index -lt $sortedOptionSets.Count; $index++) {
+        $optionSet = $sortedOptionSets[$index]
+        $comma = ""
+        if ($index -lt ($sortedOptionSets.Count - 1)) {
+            $comma = ","
+        }
+
+        $optionSetContext = $optionSet.OptionSet
+        if ($null -ne $optionSetContext) {
+            if ($optionSetContext.PSObject.Properties.Match("Comma")) {
+                $optionSetContext.Comma = $comma
+            }
+            else {
+                Add-Member -InputObject $optionSetContext -MemberType NoteProperty -Name "Comma" -Value $comma
+            }
+        }
+
         [void]$optionSetModels.Add([pscustomobject]@{
                 EntityLogicalName             = $optionSet.EntityLogicalName
                 OptionSetAttributeLogicalName = $optionSet.OptionSetAttributeLogicalName
                 OptionSetAttributeKey         = $optionSet.OptionSetAttributeKey
                 OptionSetName                 = $optionSet.OptionSetName
                 IsGlobal                      = $optionSet.IsGlobal
+                Comma                         = $comma
                 Options                       = @($optionSet.Options)
-                OptionSet                     = $optionSet.OptionSet
+                OptionSet                     = $optionSetContext
             })
     }
 
@@ -614,6 +632,7 @@ function Convert-EntityTypeScriptContent {
             LogicalName = $attributeLogicalName
             SchemaName = $attributeSchemaName
             Key = $attributeLogicalName
+            Comma = ""
         }
 
         $sourceContext = Get-TemplateContextFromObject -InputObject $attribute
@@ -634,12 +653,29 @@ function Convert-EntityTypeScriptContent {
     $sortedAttributes = @($rawAttributes.ToArray() | Sort-Object LogicalName)
     $attributeModels = New-Object System.Collections.Generic.List[object]
 
-    foreach ($attribute in $sortedAttributes) {
+    for ($index = 0; $index -lt $sortedAttributes.Count; $index++) {
+        $attribute = $sortedAttributes[$index]
+        $comma = ""
+        if ($index -lt ($sortedAttributes.Count - 1)) {
+            $comma = ","
+        }
+
+        $attributeContext = $attribute.Attribute
+        if ($null -ne $attributeContext) {
+            if ($attributeContext.PSObject.Properties.Match("Comma")) {
+                $attributeContext.Comma = $comma
+            }
+            else {
+                Add-Member -InputObject $attributeContext -MemberType NoteProperty -Name "Comma" -Value $comma
+            }
+        }
+
         [void]$attributeModels.Add([pscustomobject]@{
                 LogicalName = $attribute.LogicalName
                 SchemaName  = $attribute.SchemaName
                 Key         = $attribute.Key
-                Attribute   = $attribute.Attribute
+                Comma       = $comma
+                Attribute   = $attributeContext
             })
     }
 

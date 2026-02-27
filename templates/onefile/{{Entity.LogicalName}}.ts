@@ -14,12 +14,12 @@ export class {{Entity.LogicalName}} {
 {{#Attributes}}        {{Attribute.Key}}: {
             SchemaName: "{{Attribute.SchemaName}}",
             LogicalName: "{{Attribute.LogicalName}}",
-        },
+        }{{Attribute.Comma}}
 {{/Attributes}}    };
 
     public static optionsets = {
 {{#OptionSets}}        {{OptionSet.AttributeKey}}: {
 {{#Options}}            {{Option.Key}}: {{Option.Value}}{{Option.Comma}}
-{{/Options}}        },
+{{/Options}}        }{{OptionSet.Comma}}
 {{/OptionSets}}    };
 }

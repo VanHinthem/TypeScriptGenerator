@@ -12,5 +12,5 @@
 
 {{/OptionSets}}
 export const {{Entity.LogicalName}}OptionSets = {
-{{#OptionSets}}    {{OptionSet.AttributeKey}}: {{Entity.LogicalName}}OptionSet_{{OptionSet.AttributeLogicalName}},
+{{#OptionSets}}    {{OptionSet.AttributeKey}}: {{Entity.LogicalName}}OptionSet_{{OptionSet.AttributeLogicalName}}{{OptionSet.Comma}}
 {{/OptionSets}}} as const;

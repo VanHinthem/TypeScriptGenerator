@@ -277,6 +277,7 @@ Inside `{{#Attributes}}`:
 - `{{Attribute.LogicalName}}`
 - `{{Attribute.SchemaName}}`
 - `{{Attribute.Key}}`
+- `{{Attribute.Comma}}`
 - `{{Attribute.<AnyAvailableAttributeField>}}`
 
 ### Option Sets Template Tokens
@@ -291,6 +292,7 @@ Inside `{{#OptionSets}}`:
 - `{{OptionSet.AttributeKey}}`
 - `{{OptionSet.Name}}`
 - `{{OptionSet.IsGlobal}}`
+- `{{OptionSet.Comma}}`
 - `{{OptionSet.<AnyAvailableOptionSetField>}}`
 
 Inside nested `{{#Options}}` (within an option set):

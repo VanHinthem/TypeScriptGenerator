@@ -568,6 +568,64 @@ function Get-OptionSetsFromEntityAlias {
     return @($set)
 }
 
+function Set-EntryTrailingComma {
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyString()]
+        [string]$EntryText,
+        [Parameter(Mandatory = $true)]
+        [bool]$HasTrailingComma,
+        [Parameter(Mandatory = $true)]
+        [string]$NewLine
+    )
+
+    $lines = $EntryText.Replace("`r", "") -split "`n", -1
+    $lastNonEmptyLineIndex = -1
+    for ($lineIndex = $lines.Length - 1; $lineIndex -ge 0; $lineIndex--) {
+        if (-not [string]::IsNullOrWhiteSpace($lines[$lineIndex])) {
+            $lastNonEmptyLineIndex = $lineIndex
+            break
+        }
+    }
+
+    if ($lastNonEmptyLineIndex -lt 0) {
+        return $EntryText
+    }
+
+    $targetLine = $lines[$lastNonEmptyLineIndex].TrimEnd()
+    if ($HasTrailingComma) {
+        if (-not $targetLine.EndsWith(",")) {
+            $targetLine += ","
+        }
+    }
+    else {
+        $targetLine = $targetLine -replace ",+$", ""
+    }
+
+    $lines[$lastNonEmptyLineIndex] = $targetLine
+    return [string]::Join($NewLine, $lines)
+}
+
+function Get-NormalizedTopLevelEntryTexts {
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyCollection()]
+        [object[]]$Entries,
+        [Parameter(Mandatory = $true)]
+        [string]$NewLine
+    )
+
+    $texts = New-Object System.Collections.Generic.List[string]
+    for ($entryIndex = 0; $entryIndex -lt $Entries.Count; $entryIndex++) {
+        $entryText = [string]$Entries[$entryIndex].Text
+        $hasTrailingComma = $entryIndex -lt ($Entries.Count - 1)
+        $normalizedText = Set-EntryTrailingComma -EntryText $entryText -HasTrailingComma $hasTrailingComma -NewLine $NewLine
+        [void]$texts.Add($normalizedText)
+    }
+
+    return $texts.ToArray()
+}
+
 function Select-ObjectByKeepKey {
     param(
         [Parameter(Mandatory = $true)][string]$Text,
@@ -612,7 +670,8 @@ function Select-ObjectByKeepKey {
 
     $newBody = $nl
     if ($kept.Count -gt 0) {
-        $newBody = $nl + ((@($kept | ForEach-Object { $_.Text })) -join $nl) + $nl
+        $normalizedKeptTexts = @(Get-NormalizedTopLevelEntryTexts -Entries @($kept.ToArray()) -NewLine $nl)
+        $newBody = $nl + ($normalizedKeptTexts -join $nl) + $nl
     }
 
     $closingIndent = ""
