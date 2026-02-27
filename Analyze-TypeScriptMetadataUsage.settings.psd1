@@ -1,0 +1,9 @@
+@{
+    SourceFolders = @(
+        '..\..\solutions\FsPo\Client\msdyn_\FsPo\FsPo|true'
+    )
+    Template              = 'auto'
+    GeneratedMetadataPath = '..\..\solutions\Shared\Client\Common\Utils\EntityMetadata'
+    DefaultRecursive      = $true
+    PruneMetadata         = $false
+}

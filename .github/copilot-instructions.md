@@ -76,8 +76,8 @@ Use only exported module functions across scripts:
 
 ### Settings Hierarchy
 
-1. `settings.json` - Default values
-2. Command-line parameters - Override settings.json
+1. `settings.psd1` - Default values
+2. Command-line parameters - Override settings.psd1
 3. `-NoClean` / `-NoOverwrite` switches - Override boolean flags
 
 ### Path Resolution

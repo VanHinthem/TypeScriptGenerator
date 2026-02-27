@@ -8,7 +8,7 @@ param(
     [string]$GeneratedMetadataPath = ".\generated",
     [bool]$DefaultRecursive = $true,
     [switch]$PruneMetadata,
-    [string]$SettingsPath = ".\Analyze-TypeScriptMetadataUsage.settings.json"
+    [string]$SettingsPath = ".\Analyze-TypeScriptMetadataUsage.settings.psd1"
 )
 
 Set-StrictMode -Version Latest
@@ -838,7 +838,7 @@ $settings = $null
 
 if (Test-Path -LiteralPath $resolvedSettingsPath -PathType Leaf) {
     try {
-        $settings = Get-Content -LiteralPath $resolvedSettingsPath -Raw | ConvertFrom-Json
+        $settings = Import-PowerShellDataFile -LiteralPath $resolvedSettingsPath -ErrorAction Stop
     }
     catch {
         throw ("Could not parse settings file '{0}': {1}" -f $resolvedSettingsPath, $_.Exception.Message)

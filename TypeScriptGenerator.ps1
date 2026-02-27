@@ -17,7 +17,7 @@ param(
     [string[]]$EntityLogicalNames,
     [string]$EntityListPath,
     [string]$SolutionUniqueName,
-    [string]$SettingsPath = ".\settings.json"
+    [string]$SettingsPath = ".\settings.psd1"
 )
 
 Set-StrictMode -Version Latest
@@ -574,7 +574,7 @@ if (-not (Test-Path -LiteralPath $resolvedSettingsPath -PathType Leaf)) {
 }
 
 try {
-    $settings = Get-Content -LiteralPath $resolvedSettingsPath -Raw | ConvertFrom-Json -ErrorAction Stop
+    $settings = Import-PowerShellDataFile -LiteralPath $resolvedSettingsPath -ErrorAction Stop
 }
 catch {
     throw ("Could not read settings file '{0}': {1}" -f $resolvedSettingsPath, $_.Exception.Message)
@@ -584,7 +584,7 @@ if (-not $PSBoundParameters.ContainsKey("TenantId")) {
     $TenantId = [string](Get-SettingsPropertyValue -Settings $settings -Name "TenantId")
 }
 
-# Settings precedence: explicit parameters override settings.json values.
+# Settings precedence: explicit parameters override settings file values.
 if (-not $PSBoundParameters.ContainsKey("EnvironmentUrl")) {
     $EnvironmentUrl = [string](Get-SettingsPropertyValue -Settings $settings -Name "EnvironmentUrl")
 }
@@ -664,31 +664,31 @@ if ($NoOverwrite.IsPresent) {
 }
 
 if ([string]::IsNullOrWhiteSpace($EnvironmentUrl)) {
-    throw "EnvironmentUrl is required. Set it in settings.json or pass -EnvironmentUrl."
+    throw "EnvironmentUrl is required. Set it in settings file or pass -EnvironmentUrl."
 }
 
 if ([string]::IsNullOrWhiteSpace($TenantId)) {
-    throw "TenantId is required. Set it in settings.json or pass -TenantId."
+    throw "TenantId is required. Set it in settings file or pass -TenantId."
 }
 
 if ([string]::IsNullOrWhiteSpace($ClientId)) {
-    throw "ClientId is required. Set it in settings.json or pass -ClientId."
+    throw "ClientId is required. Set it in settings file or pass -ClientId."
 }
 
 if ([string]::IsNullOrWhiteSpace($RedirectUri)) {
-    throw "RedirectUri is required. Set it in settings.json or pass -RedirectUri."
+    throw "RedirectUri is required. Set it in settings file or pass -RedirectUri."
 }
 
 if ([string]::IsNullOrWhiteSpace($Template)) {
-    throw "Template is required. Set it in settings.json or pass -Template."
+    throw "Template is required. Set it in settings file or pass -Template."
 }
 
 if ([string]::IsNullOrWhiteSpace($TypeScriptOutputPath)) {
-    throw "TypeScriptOutputPath is required. Set it in settings.json or pass -TypeScriptOutputPath."
+    throw "TypeScriptOutputPath is required. Set it in settings file or pass -TypeScriptOutputPath."
 }
 
 if ($null -eq $OptionSetLabelLcid -or [string]::IsNullOrWhiteSpace([string]$OptionSetLabelLcid)) {
-    throw "OptionSetLabelLcid is required. Set it in settings.json or pass -OptionSetLabelLcid."
+    throw "OptionSetLabelLcid is required. Set it in settings file or pass -OptionSetLabelLcid."
 }
 
 $resolvedOptionSetLabelLcid = 0

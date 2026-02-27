@@ -16,7 +16,7 @@ No `index.ts` is generated.
 - `modules/TemplateEngine.psm1`: template rendering
 - `modules/Pathing.psm1`: script-relative path resolution
 - `modules/ObjectTraversal.psm1`: shared case-insensitive object/dictionary traversal helpers
-- `settings.json`: default configuration values
+- `settings.psd1`: default configuration values
 - `entity.txt`: optional entity list
 - `templates/default/{{Entity.LogicalName}}.ts`: template for entity metadata output name pattern
 - `templates/default/{{Entity.LogicalName}}.optionset.ts`: template for entity option set output name pattern
@@ -30,35 +30,35 @@ No `index.ts` is generated.
 
 Defaults:
 
-Defaults are read from `settings.json`.
-Command-line parameters override values from `settings.json`.
+Defaults are read from `settings.psd1`.
+Command-line parameters override values from `settings.psd1`.
 
-`settings.json` (example):
+`settings.psd1` (example):
 
-```json
-{
-  "EnvironmentUrl": "https://<org>.crm4.dynamics.com",
-  "TenantId": "organizations",
-  "ClientId": "51f81489-12ee-4a9e-aaae-a2591f45987d",
-  "RedirectUri": "http://localhost",
-  "Template": "default",
-  "TypeScriptOutputPath": ".\\generated",
-  "Clean": true,
-  "Overwrite": true,
-  "OptionSetLabelLcid": 1033,
-  "MaxParallelEntities": 4,
-  "EntityListPath": ".\\entity.txt",
-  "EntityLogicalNames": [],
-  "SolutionUniqueName": ""
+```powershell
+@{
+  EnvironmentUrl       = "https://<org>.crm4.dynamics.com"
+  TenantId             = "organizations"
+  ClientId             = "51f81489-12ee-4a9e-aaae-a2591f45987d"
+  RedirectUri          = "http://localhost"
+  Template             = "default"
+  TypeScriptOutputPath = ".\generated"
+  Clean                = $true
+  Overwrite            = $true
+  OptionSetLabelLcid   = 1033
+  MaxParallelEntities  = 4
+  EntityListPath       = ".\entity.txt"
+  EntityLogicalNames   = @()
+  SolutionUniqueName   = ""
 }
 ```
 
 Optional script parameter:
 
-- `-SettingsPath` (default: `.\settings.json`)
+- `-SettingsPath` (default: `.\settings.psd1`)
 - `-MaxParallelEntities` (default: `4`)
 
-`EnvironmentUrl` can come from `settings.json` or from `-EnvironmentUrl`. One of both is required.
+`EnvironmentUrl` can come from `settings.psd1` or from `-EnvironmentUrl`. One of both is required.
 
 Path parameters are resolved relative to the script location when you pass a relative path.
 The template set folder is `.\templates\<Template>\`.
@@ -96,7 +96,7 @@ Implementation notes:
 
 ## Common Usage
 
-Examples below assume `EnvironmentUrl` is set in `settings.json` or passed explicitly with `-EnvironmentUrl`.
+Examples below assume `EnvironmentUrl` is set in `settings.psd1` or passed explicitly with `-EnvironmentUrl`.
 
 Use explicit entities:
 
@@ -337,12 +337,12 @@ The script prints a console summary per entity and can optionally prune unused a
   - `auto`: analyze both patterns
 - `-GeneratedMetadataPath` (default: `.\generated`)
 - `-PruneMetadata` (optional): remove unused attributes and option sets from generated files
-- `-SettingsPath` (default: `.\Analyze-TypeScriptMetadataUsage.settings.json`)
+- `-SettingsPath` (default: `.\Analyze-TypeScriptMetadataUsage.settings.psd1`)
 - `-Verbose` (optional): show which attributes are removable per entity
 
 Parameter precedence:
 
-- script parameters override values from `Analyze-TypeScriptMetadataUsage.settings.json`
+- script parameters override values from `Analyze-TypeScriptMetadataUsage.settings.psd1`
 - if `-SourceFolders` is omitted, `SourceFolders` from settings is used
 - if `-PruneMetadata` is omitted, `PruneMetadata` from settings controls prune mode
 
@@ -378,7 +378,7 @@ Use an explicit settings file:
 
 ```powershell
 .\Analyze-TypeScriptMetadataUsage.ps1 `
-  -SettingsPath ".\Analyze-TypeScriptMetadataUsage.settings.json"
+  -SettingsPath ".\Analyze-TypeScriptMetadataUsage.settings.psd1"
 ```
 
 Show removable attribute names:
