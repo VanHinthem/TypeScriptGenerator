@@ -328,23 +328,25 @@ The script prints a console summary per entity and can optionally prune unused a
 
 ### Parameters
 
-- `-SourceFolders` (required): one or more entries in format `path|true/false`
+- `-SourceFolders` (required via parameter or settings): one or more entries in format `path|true/false`
   - `path` = source folder
   - `true/false` = recursive per folder
-- `-Template` (default: `auto`): `auto`, `default`, or `onefile`
+- `-Template` (from settings when omitted): `auto`, `default`, or `onefile`
   - `default`: analyze separate `.optionset.ts` files
   - `onefile`: analyze `optionsets` inside entity metadata classes
   - `auto`: analyze both patterns
-- `-GeneratedMetadataPath` (default: `.\generated`)
+- `-GeneratedMetadataPath` (uses `TypeScriptOutputPath` from settings when omitted)
 - `-PruneMetadata` (optional): remove unused attributes and option sets from generated files
-- `-SettingsPath` (default: `.\TypeScriptMetadataMinimizer.settings.psd1`)
+- `-SettingsPath` (default: `.\settings.psd1`)
 - `-Verbose` (optional): show which attributes are removable per entity
 
 Parameter precedence:
 
-- script parameters override values from `TypeScriptMetadataMinimizer.settings.psd1`
-- if `-SourceFolders` is omitted, `SourceFolders` from settings is used
-- if `-PruneMetadata` is omitted, `PruneMetadata` from settings controls prune mode
+- script parameters override values from `settings.psd1`
+- if `-SourceFolders` is omitted, `SourceFolders` from settings is used (required)
+- if `-Template` is omitted, `Template` from settings is used (required)
+- if `-GeneratedMetadataPath` is omitted, `TypeScriptOutputPath` from settings is used (required)
+- if `-PruneMetadata` is omitted, `PruneMetadata` from settings controls prune mode when present
 
 When `-PruneMetadata` is not set and removable attributes are found, the script asks at the end if prune should run now.
 
@@ -378,7 +380,7 @@ Use an explicit settings file:
 
 ```powershell
 .\TypeScriptMetadataMinimizer.ps1 `
-  -SettingsPath ".\TypeScriptMetadataMinimizer.settings.psd1"
+  -SettingsPath ".\settings.psd1"
 ```
 
 Show removable attribute names:

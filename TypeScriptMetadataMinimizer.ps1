@@ -8,7 +8,7 @@ param(
     [string]$GeneratedMetadataPath = ".\generated",
     [bool]$DefaultRecursive = $true,
     [switch]$PruneMetadata,
-    [string]$SettingsPath = ".\TypeScriptMetadataMinimizer.settings.psd1"
+    [string]$SettingsPath = ".\settings.psd1"
 )
 
 Set-StrictMode -Version Latest
@@ -877,9 +877,11 @@ if ((Get-CountSafe -Value $SourceFolders) -eq 0) {
 
 if (-not $PSBoundParameters.ContainsKey("Template")) {
     $settingsTemplate = [string](Get-SettingsPropertyValue -Settings $settings -Name "Template")
-    if (-not [string]::IsNullOrWhiteSpace($settingsTemplate)) {
-        $Template = $settingsTemplate.Trim().ToLowerInvariant()
+    if ([string]::IsNullOrWhiteSpace($settingsTemplate)) {
+        throw ("Template is required in settings file '{0}' when -Template is not provided." -f $resolvedSettingsPath)
     }
+
+    $Template = $settingsTemplate.Trim().ToLowerInvariant()
 }
 
 if ($Template -notin @("auto", "default", "onefile")) {
@@ -887,10 +889,12 @@ if ($Template -notin @("auto", "default", "onefile")) {
 }
 
 if (-not $PSBoundParameters.ContainsKey("GeneratedMetadataPath")) {
-    $settingsGeneratedPath = [string](Get-SettingsPropertyValue -Settings $settings -Name "GeneratedMetadataPath")
-    if (-not [string]::IsNullOrWhiteSpace($settingsGeneratedPath)) {
-        $GeneratedMetadataPath = $settingsGeneratedPath.Trim()
+    $settingsGeneratedPath = [string](Get-SettingsPropertyValue -Settings $settings -Name "TypeScriptOutputPath")
+    if ([string]::IsNullOrWhiteSpace($settingsGeneratedPath)) {
+        throw ("TypeScriptOutputPath is required in settings file '{0}' when -GeneratedMetadataPath is not provided." -f $resolvedSettingsPath)
     }
+
+    $GeneratedMetadataPath = $settingsGeneratedPath.Trim()
 }
 
 if (-not $PSBoundParameters.ContainsKey("DefaultRecursive")) {

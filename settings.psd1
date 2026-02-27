@@ -12,4 +12,9 @@
     EntityListPath      = '.\entity.txt'
     EntityLogicalNames  = @()
     SolutionUniqueName  = ''
+    SourceFolders       = @(
+        '.\src|true'
+    )
+    DefaultRecursive    = $true
+    PruneMetadata       = $false
 }
